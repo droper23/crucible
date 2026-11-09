@@ -64,7 +64,7 @@ export function espressoEligible(problem) {
   if (problem.kind === 'io') return problem.tests.every((t) => !t.stdin);
   if (problem.kind !== 'function') return false;
   const okParam = (t) => ['int', 'float', 'bool', 'int[]', 'float[]', 'int[][]'].includes(t);
-  const okRet = (t) => ['int', 'float', 'bool'].includes(t) || (t === 'void' && problem.mutates);
+  const okRet = (t) => ['int', 'bool'].includes(t) /* ESPresso prints floats with 6 significant digits */ || (t === 'void' && problem.mutates);
   if (!(problem.params.every(([, t]) => okParam(t)) && okRet(problem.returns))) return false;
   // ESPresso numbers are only exact up to ~2^24: every test value must fit.
   const fits = (v) => Array.isArray(v) ? v.every(fits) : typeof v !== 'number' || !Number.isInteger(v) || Math.abs(v) <= 16777215;

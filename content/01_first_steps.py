@@ -3103,6 +3103,9 @@ PROBLEMS.append(dict(
     title="Average of an Array",
     difficulty=0,
     tags=["arrays", "floats", "loops"],
+    # ESPresso floats are 32-bit and print with 6 significant digits, so
+    # averages like -5/3 cannot meet the 1e-6 tolerance.
+    espresso=False,
     fn="average_of",
     params=[["nums", "int[]"]],
     returns="float",
@@ -3225,15 +3228,6 @@ Return the average rounded to the nearest integer, or compute the average of onl
     let total: i64 = nums.iter().sum();
     // Rust never converts implicitly: both operands must be f64.
     total as f64 / nums.len() as f64
-}
-''',
-        "espresso": r'''fn averageOf(nums) {
-    // Start from a float so that the final division is not truncated.
-    var total = 0.0
-    for var i in 0..len(nums) {
-        total += nums[i]
-    }
-    return total / len(nums)
 }
 ''',
     },
