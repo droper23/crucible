@@ -227,6 +227,26 @@ ListNode* head = dummy.next;
 int depth(TreeNode* r) { return r ? 1 + max(depth(r->left), depth(r->right)) : 0; }
 ```
 
+## Output formatting & handy algorithms
+
+```cpp
+double pi = 3.14159265;
+cout << fixed << setprecision(2) << pi << '\n';    // 3.14
+printf("%.3f %lld %s\n", pi, 42LL, string("hi").c_str());
+vector<long long> v = {4, 1, 3};
+vector<long long> pre(v.size() + 1, 0);             // prefix sums: pre[i] = v[0..i)
+partial_sum(v.begin(), v.end(), pre.begin() + 1);
+bool any = any_of(v.begin(), v.end(), [](long long x) { return x > 3; });
+next_permutation(v.begin(), v.end());               // in-place, returns false at the end
+nth_element(v.begin(), v.begin() + 1, v.end());     // v[1] is the 2nd smallest: O(n)
+long long lo = 0, hi = 1'000'000;                   // binary search on the answer
+while (lo < hi) {
+    long long mid = lo + (hi - lo) / 2;
+    if (mid * mid >= 1'000'000) hi = mid; else lo = mid + 1;
+}
+cout << lo << '\n';                                 // 1000
+```
+
 ## Common gotchas
 
 - `accumulate(v.begin(), v.end(), 0)` sums in **int**. Use `0LL` (or `0.0` for doubles).

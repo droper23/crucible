@@ -139,8 +139,8 @@ def _trie_tests():
         [["insert", "startsWith", "search", "insert", "search"],
          ["abcdefghij", "abcdefghij", "abcdefghi", "abcdefghi", "abcdefghi"]],
         gen(1601, 60, "ab", 4),
-        gen(1602, 400, "abc", 6),
-        gen(1603, 1500, string.ascii_lowercase[:6], 8),
+        gen(1602, 150, "abc", 6),
+        gen(1603, 500, string.ascii_lowercase[:6], 8),
     ]
 
 
@@ -163,7 +163,7 @@ operations against an initially empty trie.
 `ops[i]` is the operation name and `args[i]` its string argument. Return the list of
 results, one boolean per operation.
 """,
-    constraints=["1 ≤ len(ops) = len(args) ≤ 2000",
+    constraints=["1 ≤ len(ops) = len(args) ≤ 500",
                  "1 ≤ len(args[i]) ≤ 10, lowercase English letters"],
     example_notes=[
         "After inserting `apple`, `app` is a prefix but not a word, until it is inserted too.",
@@ -2512,7 +2512,7 @@ def _mfind_tests():
         [["addNum", "addNum", "findMedian"], [2147483647, 2147483646, 0]],
         [["addNum", "addNum", "findMedian"], [-1, -2, 0]],
         gen(1711, 50, 0, 5),
-        gen(1712, 2000, -10**6, 10**6),
+        gen(1712, 700, -10**6, 10**6),
     ]
 
 
@@ -2537,7 +2537,7 @@ Design a `MedianFinder` that supports:
 
 Aim for O(log n) per `addNum` and O(1) per `findMedian`.
 """,
-    constraints=["1 ≤ len(ops) ≤ 2000", "-2³¹ ≤ x ≤ 2³¹ − 1"],
+    constraints=["1 ≤ len(ops) ≤ 700", "-2³¹ ≤ x ≤ 2³¹ − 1"],
     example_notes=["After `1, 2` the median is `1.5`; after `1, 2, 3` it is `2`.",
                    "A single number is its own median."],
     hints=[

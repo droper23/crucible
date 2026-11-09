@@ -480,6 +480,7 @@ PROBLEMS.append(dict(
     difficulty=2,
     tags=["graph", "grid", "dfs"],
     fn="max_area_of_island",
+    espresso=False,  # tests exceed ESPresso's 256-constant script limit
     params=[["grid", "int[][]"]],
     returns="int",
     statement=r"""
@@ -536,8 +537,8 @@ Sinking *before* recursing is essential: otherwise `(0,1)` calls `(0,2)` which c
 - **Marking visited after the recursive calls**: infinite mutual recursion.
 - **Counting each island's area with a global counter but forgetting to reset it** for
   the next island.
-- **ESPresso**: there is no `||`-style short-circuit trap here if you use `or`; put the
-  bounds checks *before* the `grid[r][c]` access so you never index out of range.
+- **Indexing before the bounds check**: test `0 <= r < rows` (and the columns) *before*
+  reading `grid[r][c]`; in Python a negative index silently wraps to the other side.
 
 ## Going further
 
@@ -599,26 +600,6 @@ pub fn max_area_of_island(grid: Vec<Vec<i64>>) -> i64 {
     best
 }
 ''',
-        "espresso": r'''
-// Returns the size of the island through (r, c), sinking it as it goes.
-fn area(grid, r, c) {
-  if r < 0 or c < 0 or r >= len(grid) or c >= len(grid[0]) { return 0 }
-  if grid[r][c] != 1 { return 0 }
-  grid[r][c] = 0
-  return 1 + area(grid, r + 1, c) + area(grid, r - 1, c) + area(grid, r, c + 1) + area(grid, r, c - 1)
-}
-
-fn maxAreaOfIsland(grid) {
-  var best = 0
-  for var r in 0..len(grid) {
-    for var c in 0..len(grid[0]) {
-      var a = area(grid, r, c)
-      if a > best { best = a }
-    }
-  }
-  return best
-}
-''',
     },
     tests=[
         [[[0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
@@ -647,6 +628,7 @@ PROBLEMS.append(dict(
     difficulty=2,
     tags=["graph", "grid", "bfs", "multi-source"],
     fn="oranges_rotting",
+    espresso=False,  # tests exceed ESPresso's 256-constant script limit
     params=[["grid", "int[][]"]],
     returns="int",
     statement=r"""
@@ -712,8 +694,10 @@ Multi-source BFS also solves *Walls and Gates* (distance from every room to the 
 gate) and *01 Matrix* (distance to the nearest 0). Whenever a question asks for distance
 to the **nearest** of several targets, seed the queue with all of them.
 
-The ESPresso reference shows a queue-free variant: store the minute in the cell itself
-(`2 + t`) and sweep the grid once per minute. It is O((R·C)·T), fine for small grids.
+A queue-free variant is handy in languages without growable arrays: store the minute
+in the cell itself (`2 + t` means "rotted at minute t") and sweep the whole grid once per
+minute, rotting the fresh neighbours of cells equal to `2 + t`. It costs O(R·C·T), fine
+for small grids.
 """,
     solution=r'''
 def oranges_rotting(grid):
@@ -803,48 +787,6 @@ pub fn oranges_rotting(grid: Vec<Vec<i64>>) -> i64 {
     if fresh == 0 { minutes } else { -1 }
 }
 ''',
-        "espresso": r'''
-// No queue needed: a cell holding 2 + t rotted at minute t. Each sweep
-// rots the fresh neighbours of the cells that rotted during the last minute.
-fn orangesRotting(grid) {
-  var rows = len(grid)
-  var cols = len(grid[0])
-  var t = 2
-  var changed = true
-  while changed {
-    changed = false
-    for var r in 0..rows {
-      for var c in 0..cols {
-        if grid[r][c] == t {
-          if r > 0 and grid[r - 1][c] == 1 {
-            grid[r - 1][c] = t + 1
-            changed = true
-          }
-          if r + 1 < rows and grid[r + 1][c] == 1 {
-            grid[r + 1][c] = t + 1
-            changed = true
-          }
-          if c > 0 and grid[r][c - 1] == 1 {
-            grid[r][c - 1] = t + 1
-            changed = true
-          }
-          if c + 1 < cols and grid[r][c + 1] == 1 {
-            grid[r][c + 1] = t + 1
-            changed = true
-          }
-        }
-      }
-    }
-    if changed { t += 1 }
-  }
-  for var r in 0..rows {
-    for var c in 0..cols {
-      if grid[r][c] == 1 { return -1 }
-    }
-  }
-  return t - 2
-}
-''',
     },
     tests=[
         [[[2, 1, 1], [1, 1, 0], [0, 1, 1]]],
@@ -873,6 +815,7 @@ PROBLEMS.append(dict(
     difficulty=2,
     tags=["graph", "grid", "bfs"],
     fn="shortest_path_binary_matrix",
+    espresso=False,  # tests exceed ESPresso's 256-constant script limit
     params=[["grid", "int[][]"]],
     returns="int",
     statement=r"""
@@ -1003,41 +946,6 @@ pub fn shortest_path_binary_matrix(grid: Vec<Vec<i64>>) -> i64 {
         }
     }
     -1
-}
-''',
-        "espresso": r'''
-// Queue-free BFS: an open cell holding v means "reached with v - 1 cells".
-// Each sweep extends the frontier (cells equal to d) by one step.
-fn shortestPathBinaryMatrix(grid) {
-  var n = len(grid)
-  if grid[0][0] != 0 or grid[n - 1][n - 1] != 0 { return -1 }
-  grid[0][0] = 2
-  var d = 2
-  var changed = true
-  while changed and grid[n - 1][n - 1] == 0 {
-    changed = false
-    for var r in 0..n {
-      for var c in 0..n {
-        if grid[r][c] == d {
-          for var dr in 0..3 {
-            for var dc in 0..3 {
-              var nr = r + dr - 1
-              var nc = c + dc - 1
-              if nr >= 0 and nc >= 0 and nr < n and nc < n {
-                if grid[nr][nc] == 0 {
-                  grid[nr][nc] = d + 1
-                  changed = true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    d += 1
-  }
-  if grid[n - 1][n - 1] == 0 { return -1 }
-  return grid[n - 1][n - 1] - 1
 }
 ''',
     },

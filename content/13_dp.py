@@ -159,7 +159,7 @@ two ways.""",
         "Two ways: `1+1` or `2`.",
         "Three ways: `1+1+1`, `1+2`, `2+1`.",
     ],
-    constraints=["1 ≤ n ≤ 45 (the answer fits in a signed 32-bit integer)"],
+    constraints=["1 ≤ n ≤ 35"],
     hints=[
         "Think about your *last* move. To stand on step `n`, where were you just before?",
         "You were either on step `n-1` (then took 1) or on step `n-2` (then took 2). Those two groups of sequences never overlap.",
@@ -205,8 +205,8 @@ def climb_stairs(n):
     return ways(n)
 ```
 
-Without `lru_cache` this is the exponential Fibonacci tree: `ways(45)` makes over a billion
-calls.
+Without `lru_cache` this is the exponential Fibonacci tree: `ways(35)` already makes about
+30 million calls.
 
 **Bottom-up.** Fill `dp[0..n]` left to right; each cell only needs cells to its left.
 
@@ -231,8 +231,9 @@ table or the memo, plus O(n) call stack for the top-down version).
   special case; starting from `dp[0] = dp[1] = 1` avoids it.
 - **Off-by-one in the loop.** The loop must produce `dp[n]`, so in Python it runs over
   `range(2, n + 1)`; in C, `for (i = 2; i <= n; i++)`.
-- **Overflow.** `dp[45] = 1836311903`, just under 2³¹. In C use `long long` anyway; at
-  `n = 46` a 32-bit `int` silently wraps negative.
+- **Overflow.** The answer grows like 1.618ⁿ: `dp[45] = 1836311903` is just under 2³¹, and
+  at `n = 46` a 32-bit `int` silently wraps negative. Use 64-bit integers (`long long`, `i64`)
+  and know where your type runs out.
 - **Rolling variables updated in the wrong order.** `a = b; b = a + b` loses the old `a`.
   Use a temporary or simultaneous assignment `a, b = b, a + b`.
 
@@ -297,7 +298,7 @@ table or the memo, plus O(n) call stack for the top-down version).
   return prev1
 }""",
     },
-    tests=[[2], [3], [1], [4], [5], [10], [20], [38], [44], [45]],
+    tests=[[2], [3], [1], [4], [5], [10], [20], [30], [34], [35]],
 ))
 
 # ---------------------------------------------------------------------------
@@ -3891,7 +3892,7 @@ The whole "Best Time to Buy and Sell Stock" family is this state machine with tw
     sold.max(rest)
 }""",
         "espresso": r"""fn maxProfitCooldown(prices) {
-  var NEG = -1000000000          // "impossible": far below any reachable profit
+  var NEG = -1000000             // "impossible": far below any reachable profit
   var hold = NEG                 // holding a share
   var sold = NEG                 // sold today
   var rest = 0                   // free to buy

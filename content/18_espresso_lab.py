@@ -790,14 +790,14 @@ An accelerometer reports `x`, `y`, `z` in milli-g, and you need the magnitude
 Return `⌊√n⌋`, the largest integer `r` with `r · r ≤ n`.
 
 The catch: your target uses **32-bit signed integers**. `n` comes from a 24-bit sensor
-pipeline (up to `2²⁴`), but any intermediate value you compute must stay below `2³¹`
+pipeline (below `2²⁴`), but any intermediate value you compute must stay below `2³¹`
 (ESPresso wraps silently; C would invoke undefined behaviour). A binary search that starts
 with `hi = n` squares numbers in the millions and overflows.
 """,
-    constraints=["`0 ≤ n ≤ 2²⁴ = 16 777 216`", "every intermediate value must fit in a 32-bit signed int"],
+    constraints=["`0 ≤ n < 2²⁴ = 16 777 216`", "every intermediate value must fit in a 32-bit signed int"],
     example_notes=[
         "`4 · 4 = 16 ≤ 17 < 25`, so the answer is 4.",
-        "`2²⁴ = 4096²` exactly. Squaring the naive first midpoint, about `8.4 million`, would overflow 32 bits.",
+        "`4000² = 16 000 000` exactly. Squaring the naive first midpoint, `8 million`, would overflow 32 bits.",
     ],
     examples=2,
     hints=[
@@ -865,8 +865,8 @@ long long isqrt(long long n) {
 Whenever a yes/no predicate flips exactly once, **binary search on the answer** finds the
 flip in O(log range) steps.
 
-The embedded twist is **overflow**. If you set `hi = n` with `n = 2²⁴`, the first midpoint is
-about 8.4 million, and its square (7·10¹³) wraps around in 32 bits into garbage, possibly
+The embedded twist is **overflow**. If you set `hi = n` with `n = 16 000 000`, the first midpoint is
+8 million, and its square (6.4·10¹³) wraps around in 32 bits into garbage, possibly
 negative, which then looks `≤ n`. The fix: the root of *any* 32-bit value is at most
 `46340`, so search only there. That bound works unchanged even for `n = 2³¹ − 1`.
 
@@ -905,7 +905,7 @@ O(log 46340) ≈ 16 iterations, O(1) space.
 - Lower-middle midpoint with `lo = mid`: infinite loop.
 - Using floating point (`int(math.sqrt(n))`). Fine in Python with doubles, but with
   32-bit floats (ESPresso, many MCUs) `2147395599` itself isn't representable, and its root
-  comes out as `46340.0`, one too high. (Here n ≤ 2²⁴ would be safe, but the habit isn't.)
+  comes out as `46340.0`, one too high. (Here n < 2²⁴ would be safe, but the habit isn't.)
 - `mid <= n / mid` (as in the C++ reference) is another overflow-proof test; just
   guard `mid = 0`.
 
@@ -915,7 +915,7 @@ Newton's method, `r = (r + n / r) / 2`, converges quadratically (about 5 steps f
 start). There is also a classic digit-by-digit "shift-and-subtract" root that uses only
 shifts and adds, ideal for cores without a hardware multiplier.
 """,
-    tests=[[17], [16777216], [0], [1], [2], [3], [4], [15], [16], [99], [1000000], [16769025], [16769024], [16777215], [65535]],
+    tests=[[17], [16000000], [0], [1], [2], [3], [4], [15], [16], [99], [1000000], [16769025], [16769024], [16777215], [65535]],
 ))
 
 # ---------------------------------------------------------------- 6. debounce
@@ -1118,6 +1118,9 @@ PROBLEMS.append(dict(
     difficulty=2,
     tags=["sliding window", "array", "float", "embedded"],
     fn="peak_average",
+    # Float results are normally excluded from ESPresso (it prints 6 significant digits).
+    # Every expected value here is a multiple of 1/16 below 100, so it prints exactly.
+    espresso=True,
     params=[["samples", "float[]"], ["window", "int"]],
     returns="float",
     statement=r"""

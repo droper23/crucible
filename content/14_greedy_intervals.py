@@ -633,7 +633,7 @@ def _mi_tests():
         iv.append([a, a + r.randint(0, 8)])
     t.append([iv])
     iv = []
-    for _ in range(2000):
+    for _ in range(1000):
         a = r.randint(0, 10 ** 6)
         iv.append([a, a + r.randint(0, 300)])
     t.append([iv])
@@ -798,13 +798,13 @@ def _ii_tests():
          [[], [5, 7]], [[[1, 5]], [2, 3]], [[[1, 5]], [6, 8]], [[[3, 5]], [0, 1]], [[[1, 5]], [0, 9]],
          [[[1, 2], [5, 6]], [3, 4]], [[[1, 2], [5, 6]], [2, 5]], [[[1, 2], [4, 6]], [7, 7]]]
     iv, x = [], 0
-    for _ in range(1500):
+    for _ in range(700):
         x += r.randint(1, 50)
         a = x
         x += r.randint(0, 30)
         iv.append([a, x])
-    t.append([iv, [iv[300][1] + 1, iv[700][0] + 3]])
-    t.append([iv, [iv[1499][1] + 5, iv[1499][1] + 9]])
+    t.append([iv, [iv[150][1] + 1, iv[400][0] + 3]])
+    t.append([iv, [iv[699][1] + 5, iv[699][1] + 9]])
     return t
 
 

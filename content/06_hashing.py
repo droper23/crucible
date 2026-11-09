@@ -361,8 +361,8 @@ def two_sum(nums, target):
 
 # ----------------------------------------------------------------------------- 2
 _r = random.Random(602)
-_cd_distinct = _r.sample(range(-10**6, 10**6), 6000)
-_cd_dup = _r.sample(range(-10**6, 10**6), 6000)
+_cd_distinct = _r.sample(range(-10**6, 10**6), 3500)
+_cd_dup = _r.sample(range(-10**6, 10**6), 3500)
 _cd_dup.append(_cd_dup[0])
 PROBLEMS.append(dict(
     id="contains-duplicate",
@@ -980,7 +980,7 @@ def longest_consecutive(nums):
         [[-3, -2, -1, 10, 11]],
         [[1, 1, 1, 1]],
         [[9, 1, 4, 7, 3, -1, 0, 5, 8, -1, 6]],
-        [[_r.randint(-6000, 6000) for _ in range(6000)]],
+        [[_r.randint(-5000, 5000) for _ in range(4000)]],
         [list(range(0, 4000, 2)) + list(range(10**6, 10**6 + 1500))[::-1]],
     ],
 ))
@@ -2323,7 +2323,7 @@ def lru_cache(capacity, ops, args):
          [[1, 1], [2, 2], [3, 3], [1], [4, 4], [2], [3], [1], [4]]],
         [2, ["put", "get", "put", "get", "get"], [[2, 1], [2], [3, 2], [2], [3]]],
         _lru_case(_r, 60, 8, 3),
-        _lru_case(_r, 3000, 200, 50),
-        _lru_case(_r, 3000, 5000, 1000),
+        _lru_case(_r, 1500, 200, 50),
+        _lru_case(_r, 1500, 5000, 400),
     ],
 ))

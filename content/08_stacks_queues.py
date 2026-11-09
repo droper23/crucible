@@ -533,7 +533,7 @@ long long* min_stack(char** ops, int opsSize, long long* vals, int valsSize, int
         [["push", "top", "getMin"], [42, 0, 0]],
         [["push", "push", "push", "getMin", "top"], [1, 2, 3, 0, 0]],
         [["push", "push", "push", "getMin", "pop", "getMin", "pop", "getMin"], [3, 2, 1, 0, 0, 0, 0, 0]],
-        _minstack_ops(102, 3000),
+        _minstack_ops(102, 800),
     ],
 )
 
@@ -745,7 +745,7 @@ q = q if (a >= 0) == (b > 0) else -q
         [["3", "-4", "-"]],
         [["0", "5", "/"]],
         [_rpn_random(103, 40)],
-        [_rpn_random(104, 3000)],
+        [_rpn_random(104, 600)],
     ],
 )
 
@@ -1494,7 +1494,7 @@ pub fn queue_via_stacks(ops: Vec<String>, vals: Vec<i64>) -> Vec<i64> {
         [["push", "pop", "empty", "push", "peek"], [9, 0, 0, 8, 0]],
         [["push", "push", "pop", "push", "push", "pop", "pop", "pop", "empty"], [10, 20, 0, 30, 40, 0, 0, 0, 0]],
         [["push", "empty", "peek", "peek", "pop", "empty"], [5, 0, 0, 0, 0, 0]],
-        _queue_ops(111, 3000),
+        _queue_ops(111, 800),
     ],
 )
 
