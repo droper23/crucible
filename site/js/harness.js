@@ -66,8 +66,8 @@ export function espressoEligible(problem) {
   const okParam = (t) => ['int', 'float', 'bool', 'int[]', 'float[]', 'int[][]'].includes(t);
   const okRet = (t) => ['int', 'float', 'bool'].includes(t) || (t === 'void' && problem.mutates);
   if (!(problem.params.every(([, t]) => okParam(t)) && okRet(problem.returns))) return false;
-  // ESPresso integers are 32-bit: every test value must fit.
-  const fits = (v) => Array.isArray(v) ? v.every(fits) : typeof v !== 'number' || !Number.isInteger(v) || Math.abs(v) <= 2147483647;
+  // ESPresso numbers are only exact up to ~2^24: every test value must fit.
+  const fits = (v) => Array.isArray(v) ? v.every(fits) : typeof v !== 'number' || !Number.isInteger(v) || Math.abs(v) <= 16777215;
   return problem.tests.every((t) => fits(t.args) && fits(t.expected));
 }
 
@@ -794,10 +794,11 @@ function espHarness(p, code, tests) {
   const mi = mutIndex(p);
   const lines = tests.map((t, i) => {
     const args = p.params.map(([, ty], j) => espLit(t.args[j], ty));
+    // Each test lives in its own function: ESPresso allows only 256 constants per chunk.
     if (mi >= 0) {
-      return `var crArg${i} = ${args[mi]}\n${camel(p.fn)}(${args.map((a, j) => (j === mi ? `crArg${i}` : a)).join(', ')})\nprint("${ESP_MARK}", ${i}, crArg${i})`;
+      return `fn crTest${i}() {\n  var crArg = ${args[mi]}\n  ${camel(p.fn)}(${args.map((a, j) => (j === mi ? 'crArg' : a)).join(', ')})\n  print("${ESP_MARK}", ${i}, crArg)\n}\ncrTest${i}()`;
     }
-    return `print("${ESP_MARK}", ${i}, ${camel(p.fn)}(${args.join(', ')}))`;
+    return `fn crTest${i}() {\n  print("${ESP_MARK}", ${i}, ${camel(p.fn)}(${args.join(', ')}))\n}\ncrTest${i}()`;
   });
   return `${code}\n\n${lines.join('\n')}\n`;
 }

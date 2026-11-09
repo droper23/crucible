@@ -865,9 +865,10 @@ long long isqrt(long long n) {
 Whenever a yes/no predicate flips exactly once, **binary search on the answer** finds the
 flip in O(log range) steps.
 
-The embedded twist is **overflow**. If you set `hi = n` and `n = 2³¹ − 1`, the first midpoint is
-about 10⁹, and its square wraps around in 32 bits into garbage (possibly negative, which
-then looks `≤ n`). The fix: the root of a 32-bit value is at most `46340`, so search only there.
+The embedded twist is **overflow**. If you set `hi = n` with `n = 2²⁴`, the first midpoint is
+about 8.4 million, and its square (7·10¹³) wraps around in 32 bits into garbage, possibly
+negative, which then looks `≤ n`. The fix: the root of *any* 32-bit value is at most
+`46340`, so search only there. That bound works unchanged even for `n = 2³¹ − 1`.
 
 ## Approach
 

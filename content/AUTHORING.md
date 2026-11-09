@@ -93,7 +93,7 @@ param is `int | float | bool | int[] | float[] | int[][]` and the return is `int
 ESPresso facts: `var`/`const`, `fn name(a, b) { ... }`, `if/else if/else`, `while`,
 `for var i in 0..n` (exclusive), `len(x)`, `print(...)`, integer `/` truncates, **no `%`
 operator** (use `a - (a / b) * b`), arrays are fixed-size (no push, no concatenation),
-strings can't be indexed, **ints are 32-bit** (problems whose test values exceed ±2³¹ automatically lose ESPresso), recursion depth < ~4000, no `+=` on strings needed. Set
+strings can't be indexed, **numbers are only exact up to ~2²⁴** (problems whose test values exceed ±16,777,215 automatically lose ESPresso), recursion depth < ~4000, no `+=` on strings needed. Set
 `espresso=False` when the natural solution needs growing arrays, hash maps, or deep recursion.
 An `refs["espresso"]` solution is very welcome for ESPresso-eligible problems.
 

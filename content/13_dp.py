@@ -2423,6 +2423,7 @@ def _part_tests():
     b = [r.choice([2, 4, 6, 98]) for _ in range(150)] + [1, 1]
     t.append([b])
     t.append([[2 * r.randint(1, 50) for _ in range(30)] + [1, 3]])
+    t.append([[100] * 99 + [2] + [6]])
     t.append([[97, 89, 83, 79, 73, 71, 67, 61, 59, 53, 47, 43, 41, 37, 31, 29, 23, 19, 17, 13, 11, 7, 5, 3, 2]])
     return t
 
@@ -3313,4 +3314,774 @@ O(rows · cols) time, O(cols) extra space (O(1) in place).
     tests=_msq_tests(),
 ))
 
-# @@MORE@@
+# ---------------------------------------------------------------------------
+# 19. Burst balloons
+# ---------------------------------------------------------------------------
+def _bb_tests():
+    r = random.Random(1319)
+    t = [[[3, 1, 5, 8]], [[1, 5]], [[7]], [[0]], [[9, 0, 9]], [[1, 1, 1]], [[2, 3]],
+         [[8, 2, 6, 8, 9, 8, 1, 4, 1, 5, 3, 0, 7, 7, 0, 4, 2, 2, 5]], [[0, 0, 0, 5]]]
+    t.append([[r.randint(0, 100) for _ in range(40)]])
+    t.append([[r.randint(0, 100) for _ in range(100)]])
+    return t
+
+
+PROBLEMS.append(dict(
+    id="burst-balloons",
+    title="Burst Balloons",
+    difficulty=4,
+    tags=["dp", "interval", "last decision"],
+    fn="max_coins",
+    params=[["nums", "int[]"]],
+    returns="int",
+    statement=r"""`n` balloons in a row carry the numbers `nums[0..n-1]`. Bursting balloon `i`
+earns `left · nums[i] · right` coins, where `left` and `right` are the numbers on the
+balloons **currently** adjacent to it (after earlier bursts closed the gaps). A missing
+neighbour beyond either end counts as `1`.
+
+Burst all balloons in the order of your choice and return the maximum total coins.""",
+    example_notes=[
+        "Burst 1, 5, 3, 8: `3·1·5 + 3·5·8 + 1·3·8 + 1·8·1 = 15 + 120 + 24 + 8 = 167`.",
+        "Burst 1 first (`1·1·5 = 5`), then 5 (`1·5·1 = 5`): 10.",
+    ],
+    constraints=["1 ≤ n ≤ 100", "0 ≤ nums[i] ≤ 100"],
+    hints=[
+        "Choosing the *first* balloon to burst is a dead end: afterwards its two neighbours become adjacent, so the left and right parts are no longer independent.",
+        "Choose the **last** balloon `k` to burst in an interval instead. While everything else in that interval is being burst, `k` is still standing and separates the two sides.",
+        "Pad with `1` at both ends. Let `dp[l][r]` = max coins from bursting every balloon strictly between `l` and `r`. Then `dp[l][r] = max over l < k < r of dp[l][k] + a[l]·a[k]·a[r] + dp[k][r]`. Fill by increasing `r - l`.",
+    ],
+    explanation=r"""## Intuition
+
+Interval DP is natural here: the coins for a burst depend only on the current neighbours,
+so the state should be a contiguous range. The trouble is *which* decision to split on.
+
+If you split on the **first** balloon burst in a range, its neighbours become adjacent, and
+the coins on the left side now depend on what's on the right side: the subproblems are
+coupled. Flip it around and split on the balloon burst **last** in the range `(l, r)`. While
+every other balloon in the range is being burst, `k` stands between them as a wall: balloons
+left of `k` only ever see `l` … `k` as their outer neighbours, and balloons right of `k` only
+see `k` … `r`. The two sides are independent. When `k` finally goes, its neighbours are `l`
+and `r` themselves.
+
+This "think about the last action" trick is the key to many hard interval DPs.
+
+## Approach
+
+Pad the array: `a = [1] + nums + [1]`, indices `0 … n+1`. Balloons `0` and `n+1` are never
+burst; they are the virtual `1`s at the ends.
+
+**State.** `dp[l][r]` = max coins from bursting *all balloons strictly between* `l` and `r`,
+given that `l` and `r` are still standing.
+
+**Recurrence.**
+
+```text
+dp[l][r] = max over l < k < r of  dp[l][k] + a[l]·a[k]·a[r] + dp[k][r]
+```
+
+**Base cases.** `dp[l][l+1] = 0`: nothing strictly between adjacent indices.
+
+**Answer.** `dp[0][n+1]`.
+
+**Fill order.** `dp[l][r]` reads shorter intervals, so loop over the gap `r - l = 2, 3, …,
+n+1`.
+
+**Table for `[3, 1, 5, 8]`** (`a = [1, 3, 1, 5, 8, 1]`; blank = empty interval):
+
+| l\r | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| 0 | | | 3 | 30 | 159 | 167 |
+| 1 | | | | 15 | 135 | 159 |
+| 2 | | | | | 40 | 48 |
+| 3 | | | | | | 40 |
+
+`dp[0][5] = 167` comes from `k = 4` (balloon 8 last): `dp[0][4] + 1·8·1 + dp[4][5] = 159 + 8
++ 0`.
+
+**Top-down.**
+
+```python
+from functools import lru_cache
+
+def max_coins(nums):
+    a = [1] + nums + [1]
+    @lru_cache(maxsize=None)
+    def best(l, r):
+        return max((best(l, k) + a[l] * a[k] * a[r] + best(k, r) for k in range(l + 1, r)),
+                   default=0)
+    return best(0, len(a) - 1)
+```
+
+**Bottom-up.** Reference solution: loops over gap, then `l`, then the split `k`.
+
+**Space.** The interval table is inherently 2-D: `dp[l][r]` reads cells in the same row and
+the same column across arbitrary distances, so no rolling trick applies. O(n²) cells is only
+10⁴ here.
+
+## Complexity
+
+O(n³) time (≈ n³/6 inner steps, 1.7 · 10⁵ for n = 100), O(n²) space.
+
+## Common mistakes
+
+- **Splitting on the first burst** (coupled subproblems, wrong answers).
+- **Inclusive interval definitions** that make `l` and `r` part of the burst set: then their
+  neighbours are unknown. The *exclusive* definition is what makes `a[l]` and `a[r]` valid
+  factors.
+- **Wrong fill order** (by `l` ascending): `dp[k][r]` with `k > l` isn't ready yet. Fill by
+  gap, or `l` descending with `r` ascending.
+- **Greedy** (always burst the smallest) fails easily.
+
+## Going further
+
+- **Matrix-chain multiplication**, **optimal BST**, **minimum cost to merge stones** and
+  **minimum score triangulation of a polygon** all share this exact skeleton:
+  `dp[l][r] = best over split k of dp[l][k] + cost(l, k, r) + dp[k][r]`.
+- **Knuth's optimisation** speeds some of these to O(n²) when the optimal split point is
+  monotone; it does *not* apply to burst balloons in general.
+""",
+    solution=r"""def max_coins(nums):
+    # Pad with virtual balloons worth 1 at both ends; they are never burst.
+    a = [1] + nums + [1]
+    m = len(a)
+    # dp[l][r] = max coins from bursting every balloon STRICTLY between l and r,
+    # while l and r themselves are still standing. Adjacent l, r (nothing inside) -> 0.
+    dp = [[0] * m for _ in range(m)]
+    # Shorter intervals first, so dp[l][k] and dp[k][r] are ready when needed.
+    for gap in range(2, m):
+        for l in range(0, m - gap):
+            r = l + gap
+            best = 0
+            for k in range(l + 1, r):
+                # k is the LAST balloon burst inside (l, r): by then its only neighbours
+                # are l and r. Before that, k separates the two sides, which are
+                # therefore independent subproblems.
+                coins = dp[l][k] + a[l] * a[k] * a[r] + dp[k][r]
+                if coins > best:
+                    best = coins
+            dp[l][r] = best
+    return dp[0][m - 1]
+""",
+    refs={
+        "cpp": r"""long long maxCoins(vector<long long>& nums) {
+    vector<long long> a = {1};
+    a.insert(a.end(), nums.begin(), nums.end());
+    a.push_back(1);
+    int m = a.size();
+    vector<vector<long long>> dp(m, vector<long long>(m, 0));
+    // l descending, r ascending: dp[l][k] (same row, smaller r) and dp[k][r] (row below)
+    // are both already computed.
+    for (int l = m - 3; l >= 0; --l)
+        for (int r = l + 2; r < m; ++r)
+            for (int k = l + 1; k < r; ++k)
+                dp[l][r] = max(dp[l][r], dp[l][k] + a[l] * a[k] * a[r] + dp[k][r]);
+    return dp[0][m - 1];
+}""",
+        "rust": r"""pub fn max_coins(nums: Vec<i64>) -> i64 {
+    let mut a = vec![1i64];
+    a.extend_from_slice(&nums);
+    a.push(1);
+    let m = a.len();
+    let mut dp = vec![vec![0i64; m]; m];
+    for gap in 2..m {
+        for l in 0..m - gap {
+            let r = l + gap;
+            dp[l][r] = (l + 1..r)
+                .map(|k| dp[l][k] + a[l] * a[k] * a[r] + dp[k][r])
+                .max()
+                .unwrap_or(0);
+        }
+    }
+    dp[0][m - 1]
+}""",
+    },
+    espresso=False,
+    tests=_bb_tests(),
+))
+
+# ---------------------------------------------------------------------------
+# 20. Regular expression matching
+# ---------------------------------------------------------------------------
+def _re_tests():
+    r = random.Random(1320)
+    t = [["aa", "a"], ["aa", "a*"], ["ab", ".*"], ["aab", "c*a*b"], ["mississippi", "mis*is*p*."],
+         ["", "a*b*"], ["", ""], ["a", ""], ["ab", ".*c"], ["aaa", "a*a"], ["aaa", "ab*a*c*a"],
+         ["a", "ab*"], ["aaaaaaaaaaaaaaaaaaaaab", "a*a*a*a*a*a*a*a*a*a*c"], ["abcd", "d*"],
+         ["mississippi", "mis*is*ip*."], ["bbbba", ".*a*a"], ["", "."]]
+    # Random cases: a pattern derived from the string (often matching), then mutated.
+    for _ in range(14):
+        n = r.randint(0, 12)
+        s = "".join(r.choice("ab") for _ in range(n))
+        p = ""
+        for ch in s:
+            roll = r.random()
+            if roll < 0.25:
+                p += "."
+            elif roll < 0.45:
+                p += ch + "*"
+            elif roll < 0.55:
+                p += ".*"
+            else:
+                p += ch
+            if r.random() < 0.15:
+                p += r.choice("ab") + "*"
+        if r.random() < 0.4 and p:
+            i = r.randrange(len(p))
+            if p[i] in "ab":
+                p = p[:i] + ("b" if p[i] == "a" else "a") + p[i + 1:]
+        t.append([s, p])
+    return t
+
+
+PROBLEMS.append(dict(
+    id="regular-expression-matching",
+    title="Regular Expression Matching",
+    difficulty=4,
+    tags=["dp", "string pair", "2-D"],
+    fn="is_match",
+    params=[["s", "str"], ["p", "str"]],
+    returns="bool",
+    statement=r"""Implement matching of a tiny regular-expression language. The pattern `p`
+contains lowercase letters and two special characters:
+
+- `.` matches any **single** character;
+- `*` matches **zero or more** copies of the element right before it.
+
+The match must cover the **entire** string `s` (not just a substring). Return `true` if
+`p` matches `s`.
+
+Every `*` in `p` is preceded by a letter or `.` (never by another `*`, never at the start).""",
+    example_notes=[
+        "`\"a\"` covers only the first character of `\"aa\"`.",
+        "`a*` is two copies of `a`.",
+    ],
+    constraints=["0 ≤ len(s) ≤ 30", "0 ≤ len(p) ≤ 30", "`s` has lowercase letters only; `p` has lowercase letters, `.` and `*`"],
+    hints=[
+        "Match from the front. The pattern's first *element* is either a single atom (`x` or `.`) or an atom followed by `*`. Treat `x*` as one unit.",
+        "Single atom: it must match `s[0]`, then match the rests. Starred atom: either it matches *zero* copies (skip `x*` in the pattern) or it matches one copy (consume `s[0]`, keep `x*` in the pattern).",
+        "State `dp[i][j]` = `s[i:]` matches `p[j:]`. With `first = i < len(s) and p[j] in (s[i], '.')`: if `p[j+1] == '*'`, `dp[i][j] = dp[i][j+2] or (first and dp[i+1][j])`; else `dp[i][j] = first and dp[i+1][j+1]`. Fill from the ends backwards.",
+    ],
+    explanation=r"""## Intuition
+
+Backtracking is the obvious approach: try every number of repetitions for each `x*`. It is
+exponential: `a*a*a*a*…c` against `aaaa…ab` explores every way to distribute the `a`s among
+the stars before failing. But every recursive call is fully described by **how much of `s`
+and how much of `p` is left**, so there are only `(len(s)+1) × (len(p)+1)` distinct
+subproblems: the **string-pair** DP shape over suffixes.
+
+The key modelling choice is to treat `x*` as a single unit and handle it with two options:
+match zero copies (drop the unit) or match one copy and **stay on the same unit** (so it can
+match more). That "stay on the same state" move is the same trick as reusing a coin in
+unbounded knapsack.
+
+## Approach
+
+**State.** `dp[i][j]` = `s[i:]` is fully matched by `p[j:]`.
+
+**Recurrence.** Let `first = i < len(s) and p[j] in {s[i], '.'}`.
+
+```text
+if j + 1 < len(p) and p[j+1] == '*':
+    dp[i][j] = dp[i][j+2]                     # x* matches zero copies
+            or (first and dp[i+1][j])         # x* eats s[i], stays available
+else:
+    dp[i][j] = first and dp[i+1][j+1]         # single atom
+```
+
+**Base cases.** `dp[len(s)][len(p)] = True` (both empty). `dp[i][len(p)] = False` for
+`i < len(s)` (pattern exhausted, string left). Note `dp[len(s)][j]` for `j < len(p)` is
+*not* a base case: an empty string can still match `a*b*`, and the recurrence handles it
+because `first` is False and only the zero-copies branch survives.
+
+**Fill order.** Each cell reads `i+1` or `j+1`/`j+2`, so fill `i` from `len(s)` down to 0 and
+`j` from `len(p) - 1` down to 0.
+
+**Table for `s = "aab"`, `p = "c*a*b"`** (columns at a `*` are never used as a start; marked
+`–`):
+
+| i\j | 0:c | 1:* | 2:a | 3:* | 4:b | 5:end |
+|---|---|---|---|---|---|---|
+| 0:a | T | – | T | – | F | F |
+| 1:a | T | – | T | – | F | F |
+| 2:b | T | – | T | – | T | F |
+| 3:end | F | – | F | – | F | T |
+
+Read `dp[0][2]` ("aab" vs "a*b"): `a*` eats `a` → `dp[1][2]`, eats again → `dp[2][2]`, then
+zero copies → `dp[2][4]` ("b" vs "b") = T.
+
+**Top-down.**
+
+```python
+from functools import lru_cache
+
+def is_match(s, p):
+    @lru_cache(maxsize=None)
+    def m(i, j):
+        if j == len(p):
+            return i == len(s)
+        first = i < len(s) and p[j] in (s[i], '.')
+        if j + 1 < len(p) and p[j + 1] == '*':
+            return m(i, j + 2) or (first and m(i + 1, j))
+        return first and m(i + 1, j + 1)
+    return m(0, 0)
+```
+
+Top-down is the most readable form of this problem, and only visits reachable states.
+
+**Bottom-up.** The reference solution fills the `(len(s)+1) × (len(p)+1)` table backwards.
+
+**Space-optimized.** Row `i` reads rows `i` and `i+1`, so two rows of length `len(p)+1`
+suffice (with `j` processed right to left in the current row).
+
+## Complexity
+
+O(|s| · |p|) time and space (O(|p|) with two rows). Compare with exponential backtracking.
+
+## Common mistakes
+
+- **Treating `*` as its own token** that looks back at the previous character: you end up
+  with tangled index logic. Look *ahead* from the atom instead (`p[j+1] == '*'`).
+- **Requiring `first` for the zero-copies branch.** `x*` can match zero copies even when
+  `s` is empty or `s[i] != x`.
+- **Forgetting the empty string.** `""` vs `"a*b*"` is True; `""` vs `"."` is False.
+- **Substring instead of full match.** The answer is `dp[0][0]`, which demands both suffixes
+  be consumed entirely.
+
+## Going further
+
+- **Wildcard matching** (`?` and `*` where `*` matches any sequence) is the sibling problem:
+  `dp[i][j] = dp[i][j+1] or dp[i+1][j]` for `*`. It also has a clever greedy with backtracking
+  to the last star.
+- Real regex engines compile patterns to an NFA and simulate it (Thompson's construction),
+  which guarantees O(|s| · |p|) without a table. Backtracking engines (Perl, Python's `re`)
+  can still blow up on pathological patterns: "ReDoS".
+""",
+    solution=r"""def is_match(s, p):
+    n, m = len(s), len(p)
+    # dp[i][j] = True if the suffix s[i:] is fully matched by the suffix p[j:].
+    dp = [[False] * (m + 1) for _ in range(n + 1)]
+    dp[n][m] = True                      # empty string vs empty pattern
+    # Fill backwards: every cell depends on cells with a larger i and/or j.
+    # i goes all the way to n (empty rest of s) because "a*" etc. can match nothing.
+    for i in range(n, -1, -1):
+        for j in range(m - 1, -1, -1):
+            # Does the atom p[j] match the character s[i]? (False if s is used up.)
+            first = i < n and (p[j] == s[i] or p[j] == '.')
+            if j + 1 < m and p[j + 1] == '*':
+                # "x*" as one unit: zero copies (skip it in the pattern), or one copy
+                # (consume s[i] and stay on "x*" so it can match more).
+                dp[i][j] = dp[i][j + 2] or (first and dp[i + 1][j])
+            else:
+                # A plain atom must match exactly one character.
+                dp[i][j] = first and dp[i + 1][j + 1]
+    return dp[0][0]
+""",
+    refs={
+        "cpp": r"""bool isMatch(string s, string p) {
+    int n = s.size(), m = p.size();
+    vector<vector<char>> dp(n + 1, vector<char>(m + 1, 0));
+    dp[n][m] = 1;
+    for (int i = n; i >= 0; --i)
+        for (int j = m - 1; j >= 0; --j) {
+            bool first = i < n && (p[j] == s[i] || p[j] == '.');
+            if (j + 1 < m && p[j + 1] == '*')
+                dp[i][j] = dp[i][j + 2] || (first && dp[i + 1][j]);   // zero | one more
+            else
+                dp[i][j] = first && dp[i + 1][j + 1];
+        }
+    return dp[0][0];
+}""",
+        "rust": r"""pub fn is_match(s: String, p: String) -> bool {
+    let (s, p) = (s.as_bytes(), p.as_bytes());
+    let (n, m) = (s.len(), p.len());
+    // Two rows: next = dp[i+1][..], cur = dp[i][..].
+    let mut next = vec![false; m + 1];
+    let mut cur = vec![false; m + 1];
+    for i in (0..=n).rev() {
+        cur[m] = i == n;                                     // pattern used up
+        for j in (0..m).rev() {
+            let first = i < n && (p[j] == s[i] || p[j] == b'.');
+            cur[j] = if j + 1 < m && p[j + 1] == b'*' {
+                cur[j + 2] || (first && next[j])
+            } else {
+                first && next[j + 1]
+            };
+        }
+        std::mem::swap(&mut next, &mut cur);
+    }
+    next[0]
+}""",
+    },
+    tests=_re_tests(),
+))
+
+# ---------------------------------------------------------------------------
+# 21. Best time to buy and sell stock with cooldown
+# ---------------------------------------------------------------------------
+def _cd_tests():
+    r = random.Random(1321)
+    t = [[[1, 2, 3, 0, 2]], [[1]], [[5, 4, 3, 2, 1]], [[1, 2]], [[2, 1, 4]], [[1, 4, 2]],
+         [[6, 1, 3, 2, 4, 7]], [[1, 2, 4]], [[3, 3, 3, 3]], [[1, 7, 2, 8, 3, 9]]]
+    t.append([[r.randint(0, 1000) for _ in range(40)]])
+    t.append([[r.randint(0, 30) for _ in range(50)]])
+    return t
+
+
+PROBLEMS.append(dict(
+    id="stock-trading-with-cooldown",
+    title="Best Time to Buy and Sell Stock with Cooldown",
+    difficulty=3,
+    tags=["dp", "state machine"],
+    fn="max_profit_cooldown",
+    params=[["prices", "int[]"]],
+    returns="int",
+    statement=r"""`prices[i]` is a stock's price on day `i`. You may complete as many
+buy-then-sell transactions as you like, subject to:
+
+- you hold at most **one** share at a time (sell before buying again);
+- after you **sell**, you must skip the next day (**cooldown**) before buying again.
+
+Return the maximum total profit.""",
+    example_notes=[
+        "buy (1), sell (2), cooldown, buy (0), sell (2): profit `1 + 2 = 3`.",
+        "A single day: no trade possible.",
+    ],
+    constraints=["1 ≤ len(prices) ≤ 5000", "0 ≤ prices[i] ≤ 1000"],
+    hints=[
+        "At the end of each day you are in one of a few *modes*: holding a share, just sold today, or free (not holding, not in cooldown).",
+        "Write the best profit for each mode at day `i` in terms of the modes at day `i-1`. Which transitions are allowed? (Buying is only possible from the free mode.)",
+        "`hold = max(hold, rest - p)`, `sold = hold_prev + p`, `rest = max(rest, sold_prev)`. Start with `hold = -∞, sold = -∞ (or 0), rest = 0`; answer `max(sold, rest)`.",
+    ],
+    explanation=r"""## Intuition
+
+The cooldown means the past matters beyond "how much money do I have": whether you can buy
+today depends on whether you sold *yesterday*. When the future depends on a small amount of
+history, **add that history to the state**. Here three modes capture everything:
+
+```text
+            buy (-p)                 sell (+p)
+   ┌──────┐ ───────▶ ┌──────┐ ───────────────▶ ┌──────┐
+   │ REST │          │ HOLD │                  │ SOLD │
+   └──────┘ ◀─────── └──────┘                  └──────┘
+     ▲  │ wait  (cooldown day)      wait  ▲  │      │
+     └──┘ ◀───────────────────────────────┘──┘──────┘
+```
+
+- `HOLD` → keep holding, or sell (→ `SOLD`).
+- `SOLD` → must cool down the next day (→ `REST`).
+- `REST` → stay, or buy (→ `HOLD`).
+
+This is a **state-machine DP**: `dp[i][mode]`, with transitions between the modes.
+
+## Approach
+
+**State.** After day `i`:
+
+- `hold[i]` = best profit while holding a share;
+- `sold[i]` = best profit having sold *on day `i`*;
+- `rest[i]` = best profit not holding and free to buy tomorrow.
+
+**Recurrence.**
+
+```text
+hold[i] = max(hold[i-1], rest[i-1] - p)     # keep, or buy today (only from REST)
+sold[i] = hold[i-1] + p                     # sell today
+rest[i] = max(rest[i-1], sold[i-1])         # stay free, or finish yesterday's cooldown
+```
+
+**Base cases.** Before day 0: `hold = -∞` (can't hold nothing), `sold = -∞`, `rest = 0`.
+
+**Answer.** `max(sold[n-1], rest[n-1])`: ending while holding is never optimal.
+
+**Table for `[1, 2, 3, 0, 2]`:**
+
+| price | hold | sold | rest |
+|---|---|---|---|
+| 1 | -1 | -∞ | 0 |
+| 2 | -1 | 1 | 0 |
+| 3 | -1 | 2 | 1 |
+| 0 | 1 | -1 | 2 |
+| 2 | 1 | 3 | 2 |
+
+Day 3 (price 0): `hold = max(-1, rest = 1 - 0) = 1`: we buy at 0, using the profit 1 from
+selling at day 1 and cooling down on day 2. Day 4: sell at 2, `sold = 3`.
+
+**Top-down.** `best(i, mode)` = max profit from day `i` onward given the mode, with
+transitions mirroring the diagram:
+
+```python
+from functools import lru_cache
+
+def max_profit_cooldown(prices):
+    n = len(prices)
+    @lru_cache(maxsize=None)
+    def best(i, holding):
+        if i >= n:
+            return 0
+        wait = best(i + 1, holding)
+        if holding:
+            return max(wait, prices[i] + best(i + 2, False))   # sell, skip a day
+        return max(wait, -prices[i] + best(i + 1, True))       # buy
+    return best(0, False)
+```
+
+Here the cooldown is folded into the transition (`i + 2`), so only two modes are needed.
+
+**Bottom-up.** Three arrays of length `n`.
+
+**Space-optimized.** Each day reads only the previous day: three variables, updated from
+saved copies of yesterday's values (the reference solution).
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+- **Updating variables in place** without saving yesterday's values: `rest` would then read
+  *today's* `sold`, letting you buy the day right after selling.
+- **Initialising `hold = 0`**: that pretends you own a share for free.
+- **Returning `hold`**: you'd end up holding an unsold share.
+
+## Going further
+
+The whole "Best Time to Buy and Sell Stock" family is this state machine with tweaks:
+
+- **One transaction:** track the minimum price so far.
+- **Unlimited transactions, no cooldown:** `hold`/`cash` only; equivalently sum every
+  positive day-to-day difference.
+- **Transaction fee:** subtract the fee on sell.
+- **At most k transactions:** add the transaction count to the state, `dp[k][hold?]`,
+  O(n · k).
+""",
+    solution=r"""def max_profit_cooldown(prices):
+    NEG = float("-inf")
+    # Best profit at the end of the previous day, for each mode:
+    hold = NEG     # holding a share (impossible before any day)
+    sold = NEG     # sold today (impossible before any day)
+    rest = 0       # not holding, free to buy
+    for p in prices:
+        # Save yesterday's values: every transition reads only the previous day.
+        prev_hold, prev_sold, prev_rest = hold, sold, rest
+        hold = max(prev_hold, prev_rest - p)     # keep holding, or buy (only when free)
+        sold = prev_hold + p                     # sell the share we held
+        rest = max(prev_rest, prev_sold)         # idle, or yesterday's sale cools down
+    # Ending with a share is never better than not having bought it.
+    return max(sold, rest, 0)
+""",
+    refs={
+        "cpp": r"""long long maxProfitCooldown(vector<long long>& prices) {
+    const long long NEG = LLONG_MIN / 4;           // "impossible", safe to add a price to
+    long long hold = NEG, sold = NEG, rest = 0;
+    for (long long p : prices) {
+        long long h = hold, s = sold, r = rest;    // yesterday
+        hold = max(h, r - p);
+        sold = h + p;
+        rest = max(r, s);
+    }
+    return max(sold, rest);
+}""",
+        "rust": r"""pub fn max_profit_cooldown(prices: Vec<i64>) -> i64 {
+    let neg = i64::MIN / 4;
+    let (mut hold, mut sold, mut rest) = (neg, neg, 0i64);
+    for &p in &prices {
+        // The tuple on the right is evaluated entirely from yesterday's values.
+        (hold, sold, rest) = (hold.max(rest - p), hold + p, rest.max(sold));
+    }
+    sold.max(rest)
+}""",
+        "espresso": r"""fn maxProfitCooldown(prices) {
+  var NEG = -1000000000          // "impossible": far below any reachable profit
+  var hold = NEG                 // holding a share
+  var sold = NEG                 // sold today
+  var rest = 0                   // free to buy
+  for var i in 0..len(prices) {
+    var p = prices[i]
+    var h = hold
+    var s = sold
+    var r = rest
+    hold = h
+    if r - p > hold { hold = r - p }   // buy only from REST
+    sold = h + p
+    rest = r
+    if s > rest { rest = s }           // cooldown finished
+  }
+  if sold > rest { return sold }
+  return rest
+}""",
+    },
+    tests=_cd_tests(),
+))
+
+# ---------------------------------------------------------------------------
+# 22. Distinct subsequences
+# ---------------------------------------------------------------------------
+def _ds_tests():
+    r = random.Random(1322)
+    t = [["rabbbit", "rabbit"], ["babgbag", "bag"], ["a", "b"], ["abc", "abc"], ["abc", "abcd"],
+         ["aaa", "a"], ["aaaaa", "aa"], ["b", "b"], ["xyz", "zyx"], ["ddd", "dd"]]
+    t.append(["".join(r.choice("ab") for _ in range(60)), "abba"])
+    t.append(["".join(r.choice("abc") for _ in range(300)), "abcab"])
+    t.append(["".join(r.choice("abcdefghij") for _ in range(1000)), "bad"])
+    t.append(["a" * 40, "a" * 20])
+    return t
+
+
+PROBLEMS.append(dict(
+    id="distinct-subsequences",
+    title="Distinct Subsequences",
+    difficulty=3,
+    tags=["dp", "string pair", "counting"],
+    fn="num_distinct",
+    params=[["s", "str"], ["t", "str"]],
+    returns="int",
+    statement=r"""Count the number of distinct ways to delete characters from `s` so that what
+remains equals `t`. Two ways are different if they keep a different **set of positions** of
+`s`, even if the resulting strings are identical.
+
+Equivalently: count the subsequences of `s` (as sets of indices) that spell `t`.""",
+    example_notes=[
+        "Three different `b`s can be left out of `\"rabbbit\"`.",
+        "`ba_g___`, `ba____g`, `b____ag`, `__b__ag`, `____bag`: five index sets spell `\"bag\"`.",
+    ],
+    constraints=["1 ≤ len(s), len(t) ≤ 1000", "lowercase English letters",
+                 "every intermediate count fits in a signed 64-bit integer"],
+    hints=[
+        "State over prefixes: `dp[i][j]` = number of ways the first `i` chars of `s` can spell the first `j` chars of `t`.",
+        "Consider `s[i-1]`. You can always ignore it. If it equals `t[j-1]`, you can also use it as the last character of `t`'s prefix.",
+        "`dp[i][j] = dp[i-1][j] + (s[i-1] == t[j-1] ? dp[i-1][j-1] : 0)`, with `dp[i][0] = 1`. In 1-D, iterate `j` *downward*.",
+    ],
+    explanation=r"""## Intuition
+
+We are counting index sets, so every way must be counted exactly once. Classify each way by
+what happens to the **last character of `s`'s prefix**: either it is not used (then the
+whole of `t[:j]` comes from `s[:i-1]`) or it is used as the last character of `t[:j]` (only
+possible if it matches, and then `t[:j-1]` comes from `s[:i-1]`). These two groups are
+disjoint and cover everything, so the counts add. That's the string-pair DP with `+`
+instead of `max`.
+
+## Approach
+
+**State.** `dp[i][j]` = number of ways to choose positions in `s[:i]` that spell `t[:j]`.
+
+**Recurrence.**
+
+```text
+dp[i][j] = dp[i-1][j]                       # s[i-1] not used
+         + dp[i-1][j-1]  if s[i-1] == t[j-1] # s[i-1] matched to t[j-1]
+```
+
+**Base cases.** `dp[i][0] = 1` (the empty target is spelled by choosing nothing, exactly one
+way); `dp[0][j > 0] = 0` (empty `s` can't spell a non-empty `t`).
+
+**Answer.** `dp[len(s)][len(t)]`.
+
+**Table for `s = "rabbbit"`, `t = "rabbit"`:**
+
+| | "" | r | a | b | b | i | t |
+|---|---|---|---|---|---|---|---|
+| "" | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| r | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
+| a | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+| b | 1 | 1 | 1 | 1 | 0 | 0 | 0 |
+| b | 1 | 1 | 1 | 2 | 1 | 0 | 0 |
+| b | 1 | 1 | 1 | 3 | 3 | 0 | 0 |
+| i | 1 | 1 | 1 | 3 | 3 | 3 | 0 |
+| t | 1 | 1 | 1 | 3 | 3 | 3 | 3 |
+
+At row 5 (third `b`), column 4 (`"rabb"`): ignore this `b` → 1, or use it as the second
+`b` → `dp[4][3] = 2`; total 3.
+
+**Top-down.**
+
+```python
+from functools import lru_cache
+
+def num_distinct(s, t):
+    @lru_cache(maxsize=None)
+    def ways(i, j):                  # s[i:] spelling t[j:]
+        if j == len(t):
+            return 1
+        if len(s) - i < len(t) - j:
+            return 0                 # not enough characters left: prune
+        res = ways(i + 1, j)
+        if s[i] == t[j]:
+            res += ways(i + 1, j + 1)
+        return res
+    return ways(0, 0)
+```
+
+**Bottom-up.** The 2-D table above.
+
+**Space-optimized.** Row `i` reads row `i-1` at `j` and `j-1`. With one array, update `j`
+**from high to low** so `dp[j-1]` still holds the previous row's value when `dp[j]` reads it
+(same reasoning as 0/1 knapsack: each character of `s` is used at most once). That is the
+reference solution.
+
+## Complexity
+
+O(|s| · |t|) time, O(|t|) space.
+
+## Common mistakes
+
+- **Upward `j` in the 1-D version**: a single character of `s` could match two consecutive
+  positions of `t` (`"a"` would spell `"aa"`).
+- **`dp[i][0] = 0`**: nothing is ever counted.
+- **Overflow in intermediate cells.** Even when the final answer is small, cells for shorter
+  prefixes of `t` can be astronomically large (`s = "aaa…a"`, `t = "aa…ab"`). LeetCode's
+  version uses unsigned or modular arithmetic for this reason; here the tests keep every cell
+  within 64 bits.
+
+## Going further
+
+- **Count distinct subsequences of `s` itself** (as strings, not index sets): a different
+  1-D DP that subtracts the count from the previous occurrence of the same character.
+- **Is `t` a subsequence of `s`?** needs no DP at all: a greedy two-pointer scan.
+- Many counting DPs are asked modulo `10⁹ + 7`; reduce after every addition.
+""",
+    solution=r"""def num_distinct(s, t):
+    m = len(t)
+    # dp[j] = number of ways the processed prefix of s can spell t[:j].
+    # Before reading any of s: only the empty target is spelled, in exactly one way.
+    dp = [1] + [0] * m
+    for ch in s:
+        # Going DOWNWARD keeps dp[j-1] at its value from before this character, so `ch`
+        # is used at most once per way (it can't fill two positions of t).
+        for j in range(m, 0, -1):
+            if t[j - 1] == ch:
+                # Ways that don't use ch (already in dp[j]) + ways that use ch as t[j-1].
+                dp[j] += dp[j - 1]
+    return dp[m]
+""",
+    refs={
+        "cpp": r"""long long numDistinct(string s, string t) {
+    int m = t.size();
+    vector<long long> dp(m + 1, 0);
+    dp[0] = 1;                                  // empty target: one way
+    for (char ch : s)
+        for (int j = m; j >= 1; --j)            // downward: each char of s used once
+            if (t[j - 1] == ch) dp[j] += dp[j - 1];
+    return dp[m];
+}""",
+        "rust": r"""pub fn num_distinct(s: String, t: String) -> i64 {
+    let (s, t) = (s.as_bytes(), t.as_bytes());
+    let (n, m) = (s.len(), t.len());
+    // Full 2-D table, dp[i][j] over prefixes.
+    let mut dp = vec![vec![0i64; m + 1]; n + 1];
+    for i in 0..=n {
+        dp[i][0] = 1;
+    }
+    for i in 1..=n {
+        for j in 1..=m {
+            dp[i][j] = dp[i - 1][j];
+            if s[i - 1] == t[j - 1] {
+                dp[i][j] += dp[i - 1][j - 1];
+            }
+        }
+    }
+    dp[n][m]
+}""",
+    },
+    tests=_ds_tests(),
+))
+
