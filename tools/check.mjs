@@ -72,7 +72,7 @@ async function check(t) {
 }
 
 const queue = tasks.slice();
-await Promise.all(Array.from({ length: jobs }, async () => { while (queue.length) await check(queue.shift()).catch((e) => { fails++; failures.push(`${e}`); }); }));
+await Promise.all(Array.from({ length: jobs }, async () => { while (queue.length) { const t = queue.shift(); await check(t).catch((e) => { fails++; failures.push(`${t.p.id} [${t.lang}]: ${e}`); }); } }));
 server.kill();
 console.log(`\n${tasks.length} checks, ${fails} failed`);
 for (const f of failures) console.log(' ✗', f);
