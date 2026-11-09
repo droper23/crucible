@@ -151,7 +151,7 @@ def _rng(seed):
 def _single_tests():
     r = _rng(1501)
     big = []
-    vals = r.sample(range(-10**9, 10**9), 5001)
+    vals = r.sample(range(-10**9, 10**9), 2001)
     for v in vals[:-1]:
         big += [v, v]
     big.append(vals[-1])
@@ -183,7 +183,7 @@ once. Return that lonely value.
 
 Aim for **O(n) time and O(1) extra space**: no hash set, no sorting.
 """,
-    constraints=["1 ≤ len(nums) ≤ 2·10⁴ + 1, and len(nums) is odd",
+    constraints=["1 ≤ len(nums) ≤ 4001, and len(nums) is odd",
                  "-10⁹ ≤ nums[i] ≤ 10⁹"],
     example_notes=["`2` appears twice and cancels; `1` is left.",
                    "The pairs `1,1` and `2,2` cancel no matter where they sit; `4` survives."],

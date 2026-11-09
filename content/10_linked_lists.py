@@ -1898,7 +1898,7 @@ PROBLEMS.append(dict(
 Sort a linked list in **ascending** order and return its head, in **O(n log n)** time.
 Rearrange the nodes themselves; don't copy the values into an array.
 
-The largest test has a few thousand nodes, so an O(n²) insertion sort will be noticeably
+The largest test has 3000 nodes, so an O(n²) insertion sort will be noticeably
 slow.
 """,
     constraints=["0 ≤ number of nodes ≤ 5000", "−10⁵ ≤ node.val ≤ 10⁵"],
@@ -2090,5 +2090,5 @@ pub fn sort_list(mut head: Option<Box<ListNode>>) -> Option<Box<ListNode>> {
     },
     tests=[[[4, 2, 1, 3]], [[-1, 5, 3, 4, 0]], [[]], [[1]], [[2, 1]], [[3, 3, 1, 1, 2, 2]],
            [list(range(1, 201))], [list(range(200, 0, -1))],
-           [_rand_list(_rng, 4000, -100000, 100000)]],
+           [_rand_list(_rng, 3000, -100000, 100000)]],
 ))

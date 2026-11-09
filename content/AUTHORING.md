@@ -95,6 +95,7 @@ ESPresso facts: `var`/`const`, `fn name(a, b) { ... }`, `if/else if/else`, `whil
 operator** (use `a - (a / b) * b`), arrays are fixed-size (no push, no concatenation),
 strings can't be indexed, **numbers are only exact up to ~2²⁴** (problems whose test values exceed ±16,777,215 automatically lose ESPresso), recursion depth < ~4000, no `+=` on strings needed. Set
 `espresso=False` when the natural solution needs growing arrays, hash maps, or deep recursion.
+**ESPresso bug:** a `for var i in a..b` counter is shared across recursive calls, so in recursive functions loop with `while` and a local `var` counter. && and || are also broken; use nested ifs.
 An `refs["espresso"]` solution is very welcome for ESPresso-eligible problems.
 
 ### Assembly (`kind="asm"`)

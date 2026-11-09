@@ -1,6 +1,5 @@
 """Track 6: Hash Maps & Sets."""
 import random
-import string
 import textwrap
 
 
@@ -1173,20 +1172,12 @@ The reference solution below does exactly that.
 ))
 
 # ----------------------------------------------------------------------------- 7
-def _iso_case(r, n, alpha):
-    src = "".join(r.choice(alpha) for _ in range(n))
-    letters = sorted(set(src))
-    image = r.sample(string.ascii_letters + string.digits, len(letters))
-    m = dict(zip(letters, image))
-    return ["".join(m[c] for c in src)]
-
-
 _r = random.Random(607)
-_iso_t = _iso_case(_r, 3000, "abcdefghij")[0]
 _iso_s = "".join(_r.choice("abcdefghij") for _ in range(3000))
-_iso_t2 = _iso_case(_r, 3000, "pqrstu")[0]
-_iso_s2 = "".join(c for c in _iso_t2)  # identity map: trivially isomorphic
-_iso_t2 = _iso_t2[:-1] + ("p" if _iso_t2[-1] != "p" else "q")
+_iso_t = _iso_s.translate(str.maketrans("abcdefghij", "QWERTYUIOP"))  # a true bijection
+_iso_s2 = "".join(_r.choice("pqrstu") for _ in range(3000))
+_iso_t2 = _iso_s2.translate(str.maketrans("pqrstu", "123456"))
+_iso_t2 = _iso_t2[:-1] + ("1" if _iso_s2[-1] != "p" else "2")  # break it at the very end
 PROBLEMS.append(dict(
     id="isomorphic-strings",
     title="Isomorphic Strings",
@@ -1352,7 +1343,7 @@ def is_isomorphic(s, t):
         ["aab", "abb"],
         ["13", "42"],
         ["a b!", "x?yz"],
-        [_iso_s, _iso_case(random.Random(70), 0, "a")[0] or _iso_s.translate(str.maketrans("abcdefghij", "QWERTYUIOP"))],
+        [_iso_s, _iso_t],
         [_iso_s2, _iso_t2],
     ],
 ))

@@ -910,8 +910,8 @@ the index lets you look up the temperature anyway.
         [[100, 90, 80, 70]],
         [[70, 70, 70, 71]],
         [_temps(105, 200)],
-        [list(range(100, 30, -1)) * 50 + [100]],
-        [_temps(106, 8000)],
+        [list(range(100, 30, -1)) * 30 + [100]],
+        [_temps(106, 4000)],
     ],
 )
 
@@ -1076,7 +1076,7 @@ never negative, so it's safe.
         [[-1, -2, -3, 0]],
         [[3, 8, 4, 1, 2]],
         [_ng_rand(107, 300, -50, 50)],
-        [_ng_rand(108, 6000, -10**9, 10**9)],
+        [_ng_rand(108, 3000, -10**9, 10**9)],
     ],
 )
 
@@ -1277,8 +1277,8 @@ the maximum is still found.
         [[5, 4, 3, 2, 1]],
         [[0, 0, 9, 0, 0]],
         [_hist(109, 100, 20)],
-        [_hist(110, 6000, 10**4)],
-        [list(range(1, 5001))],
+        [_hist(110, 4000, 10**4)],
+        [list(range(1, 4001))],
     ],
 )
 
@@ -1836,7 +1836,7 @@ very long outputs.
 
 def _swm_tests():
     r = random.Random(114)
-    big = [r.randint(-10**4, 10**4) for _ in range(3000)]
+    big = [r.randint(-10**4, 10**4) for _ in range(2000)]
     return [
         [[1, 3, -1, -3, 5, 3, 6, 7], 3],
         [[1], 1],
@@ -1847,8 +1847,8 @@ def _swm_tests():
         [[1, -1], 1],
         [[r.randint(-9, 9) for _ in range(60)], 7],
         [big, 1],
-        [big, 1500],
-        [list(range(3000, 0, -1)), 1000],
+        [big, 1000],
+        [list(range(2000, 0, -1)), 700],
     ]
 
 

@@ -127,7 +127,7 @@ def _jg_tests():
     r = random.Random(1401)
     t = [[[2, 3, 1, 1, 4]], [[3, 2, 1, 0, 4]], [[0]], [[1, 0]], [[0, 1]], [[2, 0, 0]],
          [[1, 1, 0, 1]], [[5, 0, 0, 0, 0, 0]], [[2, 5, 0, 0]], [[1, 2, 0, 1, 0, 2, 0]]]
-    t.append([[r.randint(0, 3) for _ in range(40)]])
+    t.append([[r.randint(0, 4) if i % 3 else r.randint(2, 4) for i in range(40)]])
     a = [r.randint(1, 4) for _ in range(40)]
     a[20] = 0; a[19] = 1; a[18] = 2; a[17] = 3; a[16] = 1
     t.append([a])
@@ -500,14 +500,12 @@ empty tank, suppose the running sum first drops below zero after station `j`. Co
 2. For each `i`: add `diff[i]` to both. If `tank < 0`, set `start = i + 1`, `tank = 0`.
 3. At the end, if `total < 0` return `-1`; otherwise return `start`.
 
-**Why `total ≥ 0` guarantees `start` works.** The pass split the circle into failed segments
-`[0, j₁], [j₁+1, j₂], …` each with a negative sum, followed by the final segment
-`[start, n-1]` whose running sum never went negative. Driving from `start`, we finish
-`[start, n-1]` with `tank = T ≥ 0`, and then need to cover the failed segments, whose sum is
-`total - T`. Since `total ≥ 0`… more precisely, every prefix of the wrap-around part has sum
-`≥ -(T)` because the prefix sums from 0 are minimal exactly at the last failure point
-`start - 1`. The cleanest statement: `start` is the index right after the **minimum prefix
-sum**, so every partial sum measured from `start` is `≥ 0` when the total is `≥ 0`.
+**Why `total ≥ 0` guarantees `start` works.** Let `P(i) = diff[0] + … + diff[i-1]` be the
+prefix sums. During the pass, `tank = P(i+1) - P(start)`, so a reset happens exactly when the
+prefix sum hits a new strict minimum. Hence the final `start` is the index right after the
+**minimum prefix sum**. Driving from `start`, the fuel on arrival at any later station `j` is
+`P(j) - P(start) ≥ 0` (nothing is below the minimum), and after wrapping past the end it is
+`total + P(j) - P(start) ≥ 0` as well, provided `total ≥ 0`. The tank never goes negative.
 
 **Trace for `gas = [1,2,3,4,5]`, `cost = [3,4,5,1,2]`:**
 
@@ -691,11 +689,12 @@ then every later interval starts even later (sorted!), so the current block is f
 **Why `max` matters.** In `[[1,10],[2,3]]` the second interval is *contained* in the first.
 Setting `last_end = e` would shrink the block to `[1,3]`.
 
-**Why sorting by start is enough.** Within a block, the start is the block's minimum start
-(sorted order), and the end is the max end seen. An interval with `s ≤ last_end` intersects
-some interval in the block (the one achieving `last_end`), so they belong together; one with
-`s > last_end` is disjoint from every interval in the block and from... nothing earlier can
-reach it either. So each block is exactly a connected component of the overlap relation.
+**Why sorting by start is enough.** The open block covers `[block_start, last_end]`. An
+interval with `s ≤ last_end` starts inside that range (its start is ≥ `block_start` by the
+sort), so it overlaps the interval that achieved `last_end`: it belongs to the block. An
+interval with `s > last_end` is disjoint from every interval in the block, and every later
+interval starts even later, so the block is complete. Each block is exactly one connected
+group of mutually overlapping intervals.
 
 ## Complexity
 
@@ -1096,13 +1095,17 @@ O(n log n) for sorting, O(n) for the scan, O(1) extra (beyond the sort).
 }""",
         "espresso": r"""fn eraseOverlapIntervals(intervals) {
   var n = len(intervals)
-  // Insertion sort by end time, swapping whole rows (no extra arrays needed).
+  // Insertion sort by end time. Swap the two numbers of each row individually:
+  // plain values, so there are no aliasing surprises with row references.
   for var i in 1..n {
     var j = i
     while j > 0 and intervals[j - 1][1] > intervals[j][1] {
-      var tmp = intervals[j]
-      intervals[j] = intervals[j - 1]
-      intervals[j - 1] = tmp
+      var s = intervals[j][0]
+      var e = intervals[j][1]
+      intervals[j][0] = intervals[j - 1][0]
+      intervals[j][1] = intervals[j - 1][1]
+      intervals[j - 1][0] = s
+      intervals[j - 1][1] = e
       j -= 1
     }
   }
@@ -1346,12 +1349,17 @@ children are content. The answer is `child`.
 | 1 | 0 (1) | yes | 1 |
 | 1 | 1 (2) | no | 1 |
 
-**Exchange argument.** Take an optimal assignment. If the smallest cookie that fits the least
-greedy child `c₀` isn't given to `c₀`, then either (a) `c₀` gets a bigger cookie `B` and the
-small cookie `b` goes to some child `c` or nobody; swap them: `c₀` is still content with `b`,
-and `c` (greed ≥ greed of `c₀`... and `B ≥ b`) is still content with `B`. Or (b) `c₀` gets
-nothing; give `b` to `c₀`, taking it from whoever had it: the count doesn't drop. Either way
-some optimal solution agrees with the greedy's first decision.
+**Exchange argument.** Let `c₀` be the least greedy child and `b` the smallest cookie with
+`b ≥ greed[c₀]`. Take any optimal assignment where `c₀` does not get `b`:
+
+- `b` is unused: give `b` to `c₀` (returning `c₀`'s old cookie, if any). The count can only
+  stay the same or grow.
+- `b` went to another child `c`, and `c₀` has cookie `B`: then `B ≥ b` (b is the smallest
+  that fits `c₀`), so swapping is fine: `c₀` is content with `b`, `c` is content with
+  `B ≥ b ≥ greed[c]`.
+- `b` went to `c`, and `c₀` has nothing: move `b` from `c` to `c₀`. The count is unchanged.
+
+So some optimal solution makes the greedy's first choice; recurse on the rest.
 
 **Language note.** In C, `qsort` needs a comparator: return `(a > b) - (a < b)` rather than
 `a - b`, which overflows for large values. In C++ and Rust, `sort` on integers just works.
@@ -1655,11 +1663,11 @@ other, which is why a single pass gets tangled. Separate them:
   length of the increasing run ending at `i`.
 - `right[i]` similarly from the right: the length of the decreasing run starting at `i`.
 
-Each value is a **lower bound** any valid assignment must respect (by induction along the
-run). `max(left[i], right[i])` meets both bounds, and the result is valid: if `ratings[i] >
-ratings[i-1]` then `cand[i] ≥ left[i] = left[i-1] + 1`, and also `right[i] ≥ right[i-1]`...
-more simply, `right[i-1] = 1` whenever `ratings[i-1] < ratings[i]`, so `cand[i-1] =
-left[i-1] < cand[i]`. Every bound is tight, so the total is minimal.
+Each value is a **lower bound** that any valid assignment must respect (by induction along
+the run). Taking `cand[i] = max(left[i], right[i])` meets both bounds, and it is valid: if
+`ratings[i] > ratings[i-1]`, then `ratings[i-1]` does not beat its right neighbour, so
+`right[i-1] = 1` and `cand[i-1] = left[i-1] < left[i] ≤ cand[i]`. The mirror argument covers
+right neighbours. Every child gets exactly its largest lower bound, so the total is minimal.
 
 ## Approach
 

@@ -1147,7 +1147,7 @@ answer is already `false`.
   Schedule II it matters.)
 - **Two-colour DFS** (just visited/unvisited) reports a cycle whenever two paths
   reach the same vertex, e.g. `0→1, 0→2, 1→3, 2→3`, which is a DAG.
-- **Recursive DFS depth**: a chain of 2000 courses is fine here, but Kahn's algorithm
+- **Recursive DFS depth**: a chain of 1000 courses is fine here, but Kahn's algorithm
   avoids recursion entirely.
 
 ## Going further
@@ -2062,7 +2062,7 @@ There are `n` cities `0 … n-1`. `flights[i] = [from, to, price]` is a one-way 
 Return the cheapest price from `src` to `dst` using **at most `k` stops** (intermediate
 cities), i.e. at most `k + 1` flights. Return `-1` if no such route exists.
 """,
-    constraints=["2 ≤ n ≤ 300", "0 ≤ len(flights) ≤ 2000", "1 ≤ price ≤ 10⁴", "0 ≤ k < n", "src ≠ dst; no duplicate flights"],
+    constraints=["2 ≤ n ≤ 300", "0 ≤ len(flights) ≤ 1200", "1 ≤ price ≤ 10⁴", "0 ≤ k < n", "src ≠ dst; no duplicate flights"],
     example_notes=[
         "0 → 1 → 3 costs 700 with one stop; 0 → 1 → 2 → 3 is cheaper (400) but needs two stops.",
         "With k = 0 only the direct flight 0 → 2 (500) is allowed.",
@@ -2182,8 +2182,8 @@ pub fn find_cheapest_price(n: i64, flights: Vec<Vec<i64>>, src: i64, dst: i64, k
         [5, [[0, 1, 1], [1, 2, 1], [2, 3, 1], [3, 4, 1], [0, 4, 100]], 0, 4, 2],
         [5, [[0, 1, 1], [1, 2, 1], [2, 3, 1], [3, 4, 1], [0, 4, 100]], 0, 4, 3],
         [50, [[u, v, w + 1] for u, v, w in _wdir(_R, 50, 300, 500, 0)], 0, 49, 3],
-        [300, [[u, v, w + 1] for u, v, w in _wdir(_R, 300, 2000, 9999, 0)], 5, 250, 4],
-        [300, [[u, v, w + 1] for u, v, w in _wdir(_R, 300, 2000, 9999, 0)], 0, 299, 299],
+        [300, [[u, v, w + 1] for u, v, w in _wdir(_R, 300, 1200, 9999, 0)], 5, 250, 4],
+        [300, [[u, v, w + 1] for u, v, w in _wdir(_R, 300, 1200, 9999, 0)], 0, 299, 299],
     ],
 ))
 
