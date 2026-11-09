@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Crucible launcher: builds what's needed, starts the local companion, opens the browser.
+#   ./crucible            start (http://localhost:4747)
+#   ./crucible build      rebuild problems + AI helper only
+#   ./crucible check      validate every problem in every language
+set -euo pipefail
+cd "$(dirname "$0")"
+PORT="${CRUCIBLE_PORT:-4747}"
+
+build_ai() {
+  if [[ "$(uname)" == "Darwin" ]] && command -v swiftc >/dev/null; then
+    if [[ ! -x companion/ai/crucible-ai || companion/ai/main.swift -nt companion/ai/crucible-ai ]]; then
+      echo "→ building Apple Intelligence helper…"
+      swiftc -O -parse-as-library companion/ai/main.swift -o companion/ai/crucible-ai 2>/dev/null \
+        || echo "  (couldn't build the AI helper; the Coach will be unavailable)"
+    fi
+  fi
+}
+build_problems() {
+  if [[ ! -f site/data/problems.json ]] || [[ -n "$(find content -name '*.py' -newer site/data/problems.json)" ]]; then
+    echo "→ building problem set…"
+    python3 tools/build.py
+  fi
+}
+
+case "${1:-start}" in
+  build) build_ai; python3 tools/build.py ;;
+  check) python3 tools/build.py && node tools/check.mjs "${@:2}" ;;
+  start)
+    build_ai; build_problems
+    ( sleep 1; open "http://localhost:$PORT" 2>/dev/null || true ) &
+    exec python3 companion/server.py ;;
+  *) echo "usage: ./crucible [start|build|check]"; exit 1 ;;
+esac
