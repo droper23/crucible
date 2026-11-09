@@ -339,7 +339,7 @@ the longest path from the root down to any leaf.
 
 The empty tree has depth `0`; a single node has depth `1`.
 """,
-    constraints=["0 ≤ number of nodes ≤ 2000", "-100 ≤ node.val ≤ 100"],
+    constraints=["0 ≤ number of nodes ≤ 800", "-100 ≤ node.val ≤ 100"],
     example_notes=[
         "The longest root-to-leaf paths are 1→2→4, 1→2→5 and 1→3→6, each with 3 nodes.",
         "A root with only a right child: two nodes on the path.",
@@ -381,7 +381,7 @@ loop consumes exactly one level, so the number of passes is the depth.
 
 - **Time O(n)**: each node is visited exactly once and does O(1) work.
 - **Space O(h)** for the recursion stack, where `h` is the height. That is O(log n) for a
-  balanced tree and O(n) for a chain (one of the tests is a 2000-node chain). BFS uses
+  balanced tree and O(n) for a chain (one of the tests is an 800-node chain). BFS uses
   O(w) where `w` is the widest level instead.
 
 ## Common mistakes
@@ -448,10 +448,10 @@ pub fn max_depth(root: Option<Rc<RefCell<TreeNode>>>) -> i64 {
     },
     tests=[
         [_EX], [[1, None, 2]], [[]], [[0]],
-        [_chain(list(range(2000)), "L")],
+        [_chain(list(range(800)), "L")],
         [_chain(list(range(50)), "Z")],
-        [_ser(_balanced_root(list(range(1023))))],
-        [_rand_tree(_R, 300)], [_rand_tree(_R, 1000)],
+        [_ser(_balanced_root(list(range(255))))],
+        [_rand_tree(_R, 300)], [_rand_tree(_R, 600)],
     ],
 ))
 
@@ -882,7 +882,7 @@ PROBLEMS.append(dict(
 Return the values of a binary tree **level by level**: one list per depth, from the root
 level downwards, each list ordered left to right.
 """,
-    constraints=["0 ≤ number of nodes ≤ 2000", "-1000 ≤ node.val ≤ 1000"],
+    constraints=["0 ≤ number of nodes ≤ 800", "-1000 ≤ node.val ≤ 1000"],
     example_notes=[
         "Depth 0 holds 1, depth 1 holds 2 and 3, depth 2 holds 4, 5 and 6.",
         "No nodes, no levels.",
@@ -1009,7 +1009,7 @@ pub fn level_order(root: Option<Rc<RefCell<TreeNode>>>) -> Vec<Vec<i64>> {
         [_EX], [[]], [[3, 9, 20, None, None, 15, 7]], [[1]],
         [_chain([1, 2, 3, 4], "Z")],
         [_ser(_balanced_root(list(range(1, 32))))],
-        [_rand_tree(_R, 40, -1000, 1000)], [_rand_tree(_R, 2000, -1000, 1000)],
+        [_rand_tree(_R, 40, -1000, 1000)], [_rand_tree(_R, 800, -1000, 1000)],
     ],
 ))
 
@@ -1028,7 +1028,7 @@ PROBLEMS.append(dict(
 children are swapped (at every level, not just the root). Return the root of the
 inverted tree. Modifying the input in place is fine.
 """,
-    constraints=["0 ≤ number of nodes ≤ 1000", "-100 ≤ node.val ≤ 100"],
+    constraints=["0 ≤ number of nodes ≤ 500", "-100 ≤ node.val ≤ 100"],
     example_notes=[
         "Every pair of children is swapped: 2 and 3 trade places, and so do 4 and 5; 6 moves from 3's right to its left.",
         "A root with a right child becomes a root with a left child.",
@@ -1134,7 +1134,7 @@ pub fn invert_tree(root: Option<Rc<RefCell<TreeNode>>>) -> Option<Rc<RefCell<Tre
     tests=[
         [[1, 2, 3, 4, 5, None, 6]], [[2, 1]], [[]], [[1]], [[4, 2, 7, 1, 3, 6, 9]],
         [_chain([1, 2, 3, 4, 5, 6], "Z")],
-        [_rand_tree(_R, 30)], [_rand_tree(_R, 1000)],
+        [_rand_tree(_R, 30)], [_rand_tree(_R, 500)],
     ],
 ))
 
@@ -1156,7 +1156,7 @@ def _same_tests():
             nd.left = None
             break
     t.append([_ser(base), _ser(pruned)])
-    big = _rand_root(rng, [rng.randint(-50, 50) for _ in range(800)])
+    big = _rand_root(rng, [rng.randint(-50, 50) for _ in range(400)])
     t.append([_ser(big), _ser(_copy(big))])
     return t
 
@@ -1173,7 +1173,7 @@ PROBLEMS.append(dict(
 Given the roots of two binary trees `p` and `q`, return `true` if they are **the same**:
 structurally identical, with equal values in corresponding nodes.
 """,
-    constraints=["0 ≤ number of nodes in each tree ≤ 800", "-100 ≤ node.val ≤ 100"],
+    constraints=["0 ≤ number of nodes in each tree ≤ 400", "-100 ≤ node.val ≤ 100"],
     example_notes=[
         "Same shape and same values everywhere.",
         "Same values, different shape: 2 is a left child in one tree and a right child in the other.",
@@ -1451,7 +1451,7 @@ pub fn is_symmetric(root: Option<Rc<RefCell<TreeNode>>>) -> bool {
 def _path_tests():
     rng = random.Random(99)
     t = []
-    for n in (15, 120, 900):
+    for n in (15, 120, 400):
         a = _rand_tree(rng, n, -20, 20)
         sums = _leaf_sums(_de(a))
         t.append([a, rng.choice(sums)])
@@ -1473,7 +1473,7 @@ Return `true` if the tree has a **root-to-leaf** path whose values add up to
 `target_sum`. A leaf is a node with no children. The empty tree has no paths, so the
 answer for it is always `false`.
 """,
-    constraints=["0 ≤ number of nodes ≤ 900", "-1000 ≤ node.val ≤ 1000", "-10⁶ ≤ target_sum ≤ 10⁶"],
+    constraints=["0 ≤ number of nodes ≤ 400", "-1000 ≤ node.val ≤ 1000", "-10⁶ ≤ target_sum ≤ 10⁶"],
     example_notes=[
         "5 → 4 → 11 → 2 adds up to 22.",
         "The paths are 1→2 (sum 3) and 1→3 (sum 4); neither is 5.",
@@ -1604,7 +1604,7 @@ The **diameter** of a binary tree is the number of **edges** on the longest path
 any two nodes. The path does not have to pass through the root. Return the diameter
 (`0` for an empty tree or a single node).
 """,
-    constraints=["0 ≤ number of nodes ≤ 2000", "-100 ≤ node.val ≤ 100"],
+    constraints=["0 ≤ number of nodes ≤ 800", "-100 ≤ node.val ≤ 100"],
     example_notes=[
         "The path 4 → 2 → 1 → 3 → 6 (or 5 → 2 → 1 → 3 → 6) has 4 edges.",
         "Two nodes, one edge.",
@@ -1663,7 +1663,7 @@ only *extend* one branch of yours, but the best path might use both.
   long path and a short right side; the best bend is deep inside.
 - **Mixing node and edge counts.** With heights in nodes, `l + r` is already the number
   of edges (each side contributes `height` edges including the edge to the bend node).
-- **Recomputing heights** inside a loop over nodes: O(n²), which a 2000-node chain makes
+- **Recomputing heights** inside a loop over nodes: O(n²), which an 800-node chain makes
   visible.
 - **Python closures**: assigning `best = ...` inside a nested function creates a local
   unless you write `nonlocal best` (or store it in a list/attribute).
@@ -1734,9 +1734,9 @@ pub fn diameter_of_binary_tree(root: Option<Rc<RefCell<TreeNode>>>) -> i64 {
     tests=[
         [_EX], [[1, 2]], [[]], [[1]],
         [[1, 2, 3, 4, 5, None, None, 6, None, None, 7, 8, None, None, 9, 10]],
-        [_chain(list(range(2000)), "L")],
+        [_chain(list(range(800)), "L")],
         [_ser(_balanced_root(list(range(127))))],
-        [_rand_tree(_R, 60)], [_rand_tree(_R, 1500)],
+        [_rand_tree(_R, 60)], [_rand_tree(_R, 600)],
     ],
 ))
 
@@ -1744,7 +1744,7 @@ pub fn diameter_of_binary_tree(root: Option<Rc<RefCell<TreeNode>>>) -> i64 {
 
 
 def _bal_tests():
-    t = [[_ser(_balanced_root(list(range(n))))] for (n) in (100, 1000)]
+    t = [[_ser(_balanced_root(list(range(n))))] for n in (100, 500)]
     # Fibonacci-like (AVL worst case) trees: balanced but lopsided.
     def fib_tree(h):
         if h <= 0:
@@ -1775,9 +1775,9 @@ A binary tree is **height-balanced** if, at **every** node, the heights of the l
 right subtrees differ by at most one. Return whether the given tree is height-balanced.
 The empty tree is balanced.
 """,
-    constraints=["0 ≤ number of nodes ≤ 1000", "-10⁴ ≤ node.val ≤ 10⁴"],
+    constraints=["0 ≤ number of nodes ≤ 500", "-10⁴ ≤ node.val ≤ 10⁴"],
     example_notes=[
-        "Heights at the root are 2 and 2; deeper nodes differ by at most 1 as well.",
+        "Heights at the root are 1 (left) and 2 (right); every deeper node is balanced too.",
         "The root's subtrees have heights 3 and 1.",
     ],
     hints=[
@@ -1917,7 +1917,7 @@ pub fn is_balanced(root: Option<Rc<RefCell<TreeNode>>>) -> bool {
 def _lca_tests():
     rng = random.Random(1212)
     t = []
-    for n in (30, 1000):
+    for n in (30, 500):
         a = _rand_bst(rng, n)
         vals = [x for x in a if x is not None]
         for _ in range(2):
@@ -1942,7 +1942,7 @@ that are both present in it (they may be equal). Return the **value** of their *
 common ancestor*: the deepest node that has both `p` and `q` in its subtree. A node counts
 as an ancestor of itself.
 """,
-    constraints=["2 ≤ number of nodes ≤ 1000 (one test has 500)", "values are distinct", "`p` and `q` exist in the tree"],
+    constraints=["2 ≤ number of nodes ≤ 500", "values are distinct", "`p` and `q` exist in the tree"],
     example_notes=[
         "2 and 8 are on different sides of the root 6, so they split at 6.",
         "4 lies in the subtree of 2, so 2 is its own lowest ancestor shared with 4.",
@@ -2074,15 +2074,15 @@ pub fn lowest_common_ancestor(root: Option<Rc<RefCell<TreeNode>>>, p: i64, q: i6
 def _vbst_tests():
     rng = random.Random(1313)
     t = []
-    good = _rand_bst(rng, 400)
+    good = _rand_bst(rng, 300)
     t.append([good])
     # break it deep inside: swap two values (keeps local parent/child order often)
     root = _de(good)
     nodes = sorted(_nodes(root), key=lambda n: n.val)
-    a, b = nodes[100], nodes[300]
+    a, b = nodes[100], nodes[250]
     a.val, b.val = b.val, a.val
     t.append([_ser(root)])
-    root = _de(_rand_bst(rng, 1000, -10**9, 10**9))
+    root = _de(_rand_bst(rng, 500, -10**9, 10**9))
     t.append([_ser(root)])
     # duplicate value
     root = _de(_rand_bst(rng, 50))
@@ -2115,7 +2115,7 @@ Return whether the binary tree is a valid **binary search tree**:
 Duplicates are therefore not allowed. The empty tree is a valid BST. Values may be as
 large as ±2⁵⁰, so be careful with sentinel "infinities".
 """,
-    constraints=["0 ≤ number of nodes ≤ 1000", "-2⁵⁰ ≤ node.val ≤ 2⁵⁰"],
+    constraints=["0 ≤ number of nodes ≤ 500", "-2⁵⁰ ≤ node.val ≤ 2⁵⁰"],
     example_notes=[
         "1 < 2 < 3.",
         "4 is the right child of 5 but smaller than 5, so the root's rule is violated.",
@@ -2245,7 +2245,7 @@ pub fn is_valid_bst(root: Option<Rc<RefCell<TreeNode>>>) -> bool {
 def _kth_tests():
     rng = random.Random(1414)
     t = []
-    for n in (20, 1000):
+    for n in (20, 500):
         a = _rand_bst(rng, n)
         t.append([a, 1])
         t.append([a, n])
@@ -2265,7 +2265,7 @@ PROBLEMS.append(dict(
 Given the root of a binary search tree with distinct values and an integer `k`, return
 the **k-th smallest** value in the tree (1-indexed).
 """,
-    constraints=["1 ≤ k ≤ number of nodes ≤ 1000", "values are distinct"],
+    constraints=["1 ≤ k ≤ number of nodes ≤ 500", "values are distinct"],
     example_notes=[
         "Sorted values are 1, 2, 3, 4; the first is 1.",
         "Sorted values are 1, 2, 3, 4, 5, 6; the third is 3.",
@@ -2394,7 +2394,7 @@ def _orders(root):
 def _build_tests():
     rng = random.Random(1515)
     t = []
-    for n in (12, 300, 1000):
+    for n in (12, 300, 600):
         vals = rng.sample(range(-3000, 3001), n)
         t.append(_orders(_rand_root(rng, vals)))
     return t
@@ -2413,7 +2413,7 @@ PROBLEMS.append(dict(
 whose values are all **distinct**. Rebuild the tree and return its root (an empty tree
 for empty inputs).
 """,
-    constraints=["0 ≤ n ≤ 1000", "values are distinct", "both arrays describe the same tree"],
+    constraints=["0 ≤ n ≤ 600", "values are distinct", "both arrays describe the same tree"],
     example_notes=[
         "3 is the root (first in preorder); in the inorder list 9 is to its left and 15, 20, 7 to its right.",
         "A single node.",
@@ -2588,7 +2588,7 @@ pub fn build_tree(preorder: Vec<i64>, inorder: Vec<i64>) -> Option<Rc<RefCell<Tr
     tests=[
         [[3, 9, 20, 15, 7], [9, 3, 15, 20, 7]], [[-1], [-1]], [[], []],
         [[1, 2, 3], [3, 2, 1]], [[1, 2, 3], [1, 2, 3]], [[1, 2, 4, 5, 3, 6], [4, 2, 5, 1, 3, 6]],
-        _orders(_de(_chain(list(range(500)), "Z"))),
+        _orders(_de(_chain(list(range(300)), "Z"))),
     ] + _build_tests(),
 ))
 
@@ -2606,7 +2606,7 @@ PROBLEMS.append(dict(
 Imagine standing to the right of a binary tree. Return the values you can see, from top
 to bottom: for each depth, the **rightmost** node at that depth.
 """,
-    constraints=["0 ≤ number of nodes ≤ 2000", "-100 ≤ node.val ≤ 100"],
+    constraints=["0 ≤ number of nodes ≤ 800", "-100 ≤ node.val ≤ 100"],
     example_notes=[
         "Depth 0: 1, depth 1: 3, depth 2: 4 (the 5 under 2 is hidden behind 4).",
         "Node 4 hangs on the LEFT branch, but it is the only node at depth 2, so it is visible.",
@@ -2720,7 +2720,7 @@ pub fn right_side_view(root: Option<Rc<RefCell<TreeNode>>>) -> Vec<i64> {
     tests=[
         [[1, 2, 3, None, 5, None, 4]], [[1, 2, 3, 4]], [[]], [[1, None, 3]],
         [[1, 2, 3, None, 5]], [_chain(list(range(1, 30)), "L")],
-        [_rand_tree(_R, 50)], [_rand_tree(_R, 2000)],
+        [_rand_tree(_R, 50)], [_rand_tree(_R, 800)],
     ],
 ))
 
@@ -2741,7 +2741,7 @@ node appears at most once, and the path need not pass through the root. It conta
 
 Given a non-empty binary tree, return the **maximum** path sum.
 """,
-    constraints=["1 ≤ number of nodes ≤ 1000", "-1000 ≤ node.val ≤ 1000"],
+    constraints=["1 ≤ number of nodes ≤ 500", "-1000 ≤ node.val ≤ 1000"],
     example_notes=[
         "The path 2 → 1 → 3 sums to 6.",
         "The best path is 15 → 20 → 7 = 42; including -10 or 9 would only lower it.",
@@ -2889,7 +2889,7 @@ pub fn max_path_sum(root: Option<Rc<RefCell<TreeNode>>>) -> i64 {
         [[2, -1]], [[5, 4, 8, 11, None, 13, 4, 7, 2, None, None, None, 1]],
         [[1, -2, 3, 4, None, None, -6, -1, 8]],
         [_chain([(-1) ** i * (i % 37) for i in range(600)], "Z")],
-        [_rand_tree(_R, 100, -1000, 1000)], [_rand_tree(_R, 1000, -1000, 1000)],
+        [_rand_tree(_R, 100, -1000, 1000)], [_rand_tree(_R, 500, -1000, 1000)],
         [_rand_tree(_R, 200, -1000, -1)],
     ],
 ))

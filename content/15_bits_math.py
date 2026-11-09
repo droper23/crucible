@@ -83,7 +83,7 @@ x & -x    = 0000 1000    → isolates the lowest set bit
 | Python | arbitrary precision | never overflows; `~x` is `-x-1`, `-1 >> 5` is `-1` forever |
 | C / C++ | `long long` (64-bit) | **signed overflow is undefined behaviour**; unsigned wraps mod 2⁶⁴ |
 | Rust | `i64` | panics in debug builds, wraps in release; say what you mean with `wrapping_add`, `checked_mul`, `overflowing_sub` |
-| ESPresso | 32-bit | no bitwise operators at all, so bit problems here use arithmetic |
+| ESPresso | numbers exact only up to ~2²⁴ | no bitwise operators at all, so bit problems here use arithmetic |
 
 Python's bigints are a trap for bit problems that assume a width. `~5` is `-6`, which is
 correct, but if a problem says "32-bit unsigned" you must mask yourself:
@@ -663,7 +663,7 @@ Return `true` if `n` is a power of four, i.e. `n = 4ᵏ` for some integer `k ≥
 
 Bonus: answer in O(1) without loops or recursion.
 """,
-    constraints=["-2³¹ ≤ n ≤ 2³¹ − 1"],
+    constraints=["-2²⁴ < n < 2²⁴ (the 32-bit mask in the reference also works for any int32)"],
     example_notes=["`16 = 4²`.", "`5` is not a power of anything useful here."],
     hints=[
         "First, when is `n` a power of **two**? Look at how many 1 bits it has.",
@@ -754,8 +754,8 @@ fn isPowerOfFour(n) {
   return x == 1                   // only 4^k reduces all the way to 1
 }""",
     },
-    tests=[[16], [5], [1], [0], [-4], [-16], [64], [8], [2], [1073741824], [16777216],
-           [536870912], [-1073741824], [1610612736], [4], [12]],
+    tests=[[16], [5], [1], [0], [-4], [-16], [64], [8], [2], [4194304], [1048576],
+           [8388608], [-4194304], [12582912], [16777215], [4], [12]],
 )
 
 
