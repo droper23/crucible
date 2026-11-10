@@ -3,7 +3,8 @@
 // Reference data lives in ./langdocs/<lang>.js (schema: langdocs/SCHEMA.md).
 import { signature } from './harness.js';
 
-const LANG_OF = { python: 'python', c: 'c', cpp: 'cpp', rust: 'rust', espresso: 'espresso', arm64: 'arm64' };
+const LANG_OF = { python: 'python', c: 'c', cpp: 'cpp', rust: 'rust', espresso: 'espresso', arm64: 'arm64', x86: 'x86' };
+const ASM = new Set(['arm64', 'x86']);
 const docs = {};          // lang -> { all, byName: Map<name, entry[]> }
 const loading = {};
 let ctx = { problem: null, lang: null };   // current problem + Crucible language id
@@ -30,7 +31,7 @@ async function loadDocs(lang) {
 const normOwner = (o) => (o ? o.replace(/^std::/, '').replace(/<.*$/, '').replace(/^&/, '').toLowerCase() : '');
 
 // Owners whose members are reachable without a qualifier.
-const GLOBAL_OWNERS = { python: [''], c: [''], cpp: ['', 'std'], rust: ['', 'prelude'], espresso: [''], arm64: [''] };
+const GLOBAL_OWNERS = { python: [''], c: [''], cpp: ['', 'std'], rust: ['', 'prelude'], espresso: [''], arm64: [''], x86: [''] };
 // Receiver type -> owners whose methods apply (Rust auto-deref etc.).
 const ALIASES = {
   rust: { vec: ['vec', 'slice'], string: ['string', 'str'], str: ['str'], vecdeque: ['vecdeque'], iterator: ['iterator'], i64: ['i64'], i32: ['i64'], usize: ['i64', 'usize'], u64: ['i64'], char: ['char'] },
@@ -46,6 +47,7 @@ const DEF_RX = {
   rust: [[/^[ \t]*(?:pub\s+)?fn\s+(\w+)(?:<[^>]*>)?\s*\(([^)]*)\)/gm, 'function'], [/^[ \t]*(?:pub\s+)?(?:struct|enum|trait)\s+(\w+)/gm, 'struct']],
   espresso: [[/^[ \t]*fn\s+(\w+)\s*\(([^)]*)\)/gm, 'function']],
   arm64: [[/^[ \t]*([A-Za-z_.$][\w.$]*):/gm, 'label']],
+  x86: [[/^[ \t]*([A-Za-z_.$][\w.$]*):/gm, 'label']],
 };
 const NOT_FN = new Set(['if', 'for', 'while', 'switch', 'return', 'else', 'sizeof', 'catch']);
 
@@ -132,7 +134,7 @@ function inferType(model, lang, name) {
 /** Word under position (asm words may contain dots, e.g. `b.eq`, `.globl`). */
 function wordAt(model, pos, lang) {
   const line = model.getLineContent(pos.lineNumber);
-  const rx = lang === 'arm64' ? /[A-Za-z_.$][\w.$]*/g : /[A-Za-z_][\w]*!?/g;
+  const rx = ASM.has(lang) ? /[A-Za-z_.$][\w.$]*/g : /[A-Za-z_][\w]*!?/g;
   let m;
   while ((m = rx.exec(line))) {
     const s = m.index + 1, e = s + m[0].length;
@@ -153,7 +155,10 @@ function qualifierOf(before) {
 function resolve(model, lang, word, before) {
   const d = docs[lang];
   if (!d) return [];
-  const all = d.byName.get(word) || (lang === 'arm64' ? d.byName.get(word.toLowerCase()) : null) || [];
+  const lw = word.toLowerCase();
+  // x86 AT&T: `divq` / `cmpb` fall back to the unsuffixed mnemonic's entry.
+  const all = d.byName.get(word) || (ASM.has(lang) ? d.byName.get(lw) : null)
+    || (lang === 'x86' && /^[a-z]{2,}[bwlq]$/.test(lw) ? d.byName.get(lw.slice(0, -1)) : null) || [];
   if (!all.length) return [];
   const qual = qualifierOf(before);
   if (qual) {
@@ -179,14 +184,68 @@ function resolve(model, lang, word, before) {
 // ---------------------------------------------------------------- rendering
 const fence = (lang, code) => '```' + ({ arm64: 'asm', espresso: 'javascript' }[lang] || lang) + '\n' + code + '\n```';
 
-function entryMarkdown(lang, e, brief = false) {
-  const parts = [fence(lang, e.sig || e.name)];
-  if (e.doc) parts.push(e.doc);
-  if (!brief && e.params?.length) parts.push(e.params.map((p) => `- \`${p.label}\`: ${p.doc}`).join('\n'));
-  if (!brief && e.example) parts.push(fence(lang, e.example));
-  if (e.header) parts.push(`*Requires* \`${e.header}\``);
-  return parts.join('\n\n');
+const SEP = { python: '.', espresso: '.' };
+const KIND_LABEL = { instruction: 'instruction', directive: 'directive', constant: 'constant', type: 'type', keyword: 'keyword', macro: 'macro', module: 'module', snippet: 'snippet', method: 'method', function: 'function' };
+
+/** Split a signature's argument list on top-level commas. */
+function sigArgs(sig) {
+  const open = sig.indexOf('(');
+  if (open < 0) return [];
+  const out = []; let depth = 0, cur = '';
+  for (const ch of sig.slice(open + 1)) {
+    if ('([{<'.includes(ch)) depth++;
+    else if (')]}>'.includes(ch)) { if (depth === 0) break; depth--; }
+    if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
 }
+
+/** Where an entry comes from: `<stdio.h>`, `heapq`, `std::collections::HashMap`, … */
+function providedBy(lang, e) {
+  const h = (e.header || '').trim();
+  if (h) {
+    let m;
+    if ((m = h.match(/^#include\s*(<[^>]+>|"[^"]+")/))) return m[1];
+    if ((m = h.match(/^from\s+(\S+)\s+import/))) return m[1];
+    if ((m = h.match(/^import\s+(\S+)/))) return m[1];
+    if ((m = h.match(/^use\s+([^;]+)/))) return m[1].trim();
+    return h;
+  }
+  if (e.owner) return null;
+  if (e.kind === 'keyword') return null;
+  return { python: 'builtins', rust: 'std prelude', espresso: 'ESPresso runtime', arm64: null, c: null, cpp: null }[lang] || null;
+}
+
+/** Hover sections, IDE style: title, origin / returns / params, docs, usage, full signature. */
+function entrySections(lang, e, brief = false) {
+  const q = e.owner ? `${e.owner}${SEP[lang] || '::'}${e.name}` : e.name;
+  const from = providedBy(lang, e);
+  const head = [`**${KIND_LABEL[e.kind] || e.kind}** \`${q}\``];
+  if (from) head.push(`provided by \`${from}\``);
+  else if (e.owner && e.kind === 'method') head.push(`member of \`${e.owner}\``);
+  const out = [head.join('  \n')];
+  if (brief) {
+    out.push(fence(lang, e.sig || e.name));
+    if (e.doc) out.push(e.doc);
+    return out;
+  }
+  const api = [];
+  if (e.returns) { const m = e.returns.match(/^(.+?)\s+[—–]\s+(.*)$/s); api.push(`→ ${m ? `\`${m[1]}\` — ${m[2]}` : `\`${e.returns}\``}`); }
+  if (e.params?.length) {
+    const args = sigArgs(e.sig || '');
+    const decl = (label) => args.find((a) => a === label || new RegExp(`(^|[^\\w])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\w]|$)`).test(a)) || label;
+    api.push('**Parameters:**\n' + e.params.map((p) => `- \`${decl(p.label)}\`${p.doc ? ` — ${p.doc}` : ''}`).join('\n'));
+  }
+  if (api.length) out.push(api.join('\n\n'));
+  const body = [];
+  if (e.doc) body.push(e.doc);
+  if (e.example) body.push('**Usage**\n' + fence(lang, e.example));
+  if (body.length) out.push(body.join('\n\n'));
+  out.push(fence(lang, e.sig || e.name));
+  return out;
+}
+const entryMarkdown = (lang, e) => entrySections(lang, e).join('\n\n---\n\n');
 
 function problemHover(lang, word) {
   const p = ctx.problem;
@@ -299,23 +358,23 @@ export async function installIde(m) {
         }
         const hits = resolve(model, lang, w.word, before).slice(0, 3);
         if (!hits.length) return null;
-        return { range, contents: hits.map((e, i) => ({ value: (i ? '---\n\n' : '') + entryMarkdown(lang, e, hits.length > 1) })) };
+        return { range, contents: hits.flatMap((e) => entrySections(lang, e, hits.length > 1)).map((value) => ({ value })) };
       },
     });
 
     m.languages.registerCompletionItemProvider(mid, {
-      triggerCharacters: lang === 'arm64' ? ['.'] : ['.', ':', '>'],
+      triggerCharacters: ASM.has(lang) ? ['.'] : ['.', ':', '>'],
       provideCompletionItems: async (model, pos) => {
         await loadDocs(lang);
         const d = docs[lang];
         const line = model.getLineContent(pos.lineNumber);
-        const wordRx = lang === 'arm64' ? /[A-Za-z_.$][\w.$]*$/ : /[A-Za-z_][\w]*$/;
+        const wordRx = ASM.has(lang) ? /[A-Za-z_.$][\w.$]*$/ : /[A-Za-z_][\w]*$/;
         const typed = line.slice(0, pos.column - 1).match(wordRx)?.[0] || '';
         const range = new m.Range(pos.lineNumber, pos.column - typed.length, pos.lineNumber, pos.column);
         const before = line.slice(0, pos.column - 1 - typed.length);
         // `:` and `>` only trigger for `::` and `->`.
         if (!typed && /[^:]:$|[^-]>$/.test(before)) return { suggestions: [] };
-        const qual = lang === 'arm64' ? null : qualifierOf(before);
+        const qual = ASM.has(lang) ? null : qualifierOf(before);
         const seen = new Set();
         const suggestions = [];
         const add = (e, sortGroup) => {
@@ -355,6 +414,7 @@ export async function installIde(m) {
           suggestions.push({ label: { label: s.name, description: 'your code' }, kind: s.kind === 'function' ? K.Function : s.kind === 'label' ? K.Reference : K.Struct, detail: s.sig, documentation: s.doc || undefined, insertText: s.name, range, sortText: '0' + s.name });
         }
         const globals = GLOBAL_OWNERS[lang] || [''];
+  text = text.split('\n').filter((l) => !/\b(ListNode|TreeNode)\s*\(/.test(l)).join('\n'); // harness type boilerplate
         for (const e of d.all) {
           if (globals.includes(e._owner) || e.kind === 'keyword' || e.kind === 'module' || e.kind === 'type' || e.kind === 'instruction' || e.kind === 'directive') add(e, e.kind === 'keyword' ? '2' : '1');
         }
@@ -369,7 +429,7 @@ export async function installIde(m) {
       },
     });
 
-    if (lang !== 'arm64') {
+    if (!ASM.has(lang)) {
       m.languages.registerSignatureHelpProvider(mid, {
         signatureHelpTriggerCharacters: ['(', ','],
         signatureHelpRetriggerCharacters: [')'],
@@ -438,7 +498,7 @@ export function parseDiagnostics(lang, text, codeLineCount, isIo = false) {
     seen.add(k);
     out.push({ line, col, severity, message: message.trim() });
   };
-  if (lang === 'c' || lang === 'cpp' || lang === 'asm') {
+  if (lang === 'c' || lang === 'cpp' || lang === 'asm' || lang === 'x86') {
     const files = isIo ? 'solution\\.\\w+|main\\.\\w+' : 'solution\\.\\w+';
     const rx = new RegExp(`(?:^|[\\s/])(?:${files}):(\\d+):(?:(\\d+):)?\\s*(fatal error|error|warning):\\s*(.*)$`, 'gm');
     let m;
@@ -511,4 +571,77 @@ export function trackDiagnosticEdits(m, editor) {
     const keep = markers.filter((mk) => !touched(mk));
     if (keep.length !== markers.length) m.editor.setModelMarkers(model, 'crucible', keep);
   });
+}
+
+// ---------------------------------------------------------------- "new in this problem"
+// Library functions a problem's starter (and language notes) use for the first time in
+// the curriculum, so the description can show how to call them. Starters never contain
+// the answer, so this can't spoil anything.
+const INTRO_KINDS = new Set(['function', 'method', 'macro', 'constant', 'instruction']);
+const firstSeen = {}; // lang -> Map(entry -> problem id)
+
+const INTRO_STOP = new Set(['true', 'false', 'True', 'False', 'None', 'NULL', 'null', 'main']);
+const CALLABLE = new Set(['function', 'method', 'macro']);
+
+function entriesIn(d, text, lang) {
+  const out = new Set();
+  if (ASM.has(lang)) {
+    // Assembly: the mnemonic at the start of each code line (comments describe goals).
+    for (const raw of text.split('\n')) {
+      const line = raw.replace(/(\/\/|#|;).*$/, '').replace(/^\s*[\w.$]+:/, '').trim();
+      const w = line.match(/^[a-z][a-z0-9.]*/i)?.[0].toLowerCase();
+      const e = w && (d.byName.get(w) || []).find((x) => x.kind === 'instruction');
+      if (e) out.add(e);
+    }
+    return out;
+  }
+  const globals = GLOBAL_OWNERS[lang] || [''];
+  text = text.split('\n').filter((l) => !/\b(ListNode|TreeNode)\s*\(/.test(l)).join('\n'); // harness type boilerplate
+  const rx = /(\.|->|::)?\s*([A-Za-z_][A-Za-z0-9_]*!?)(\s*\()?/g;
+  let m;
+  while ((m = rx.exec(text))) {
+    if (INTRO_STOP.has(m[2])) continue;
+    const member = !!m[1], called = !!m[3];
+    const cands = (d.byName.get(m[2]) || []).filter((e) => INTRO_KINDS.has(e.kind) && e.kind !== 'instruction' && (CALLABLE.has(e.kind) ? called : true));
+    if (!cands.length) continue;
+    const pool = cands.filter((e) => (e.kind === 'method') === member);
+    // Module members (math.e, std::io::stdin) only count when written qualified.
+    const list = (pool.length ? pool : member ? [] : cands.filter((e) => e.kind !== 'method'))
+      .filter((e) => e.kind === 'method' || member || globals.includes(normOwner(e.owner)));
+    if (!list.length) continue;
+    out.add(list.find((e) => e.owner && new RegExp(`\\b${e.owner.replace(/^std::/, '').replace(/<.*$/, '').replace(/[^\w]/g, '')}\\b`, 'i').test(text)) || list[0]);
+  }
+  return out;
+}
+
+export async function introducedEntries(problems, problem, lang, textOf) {
+  const dl = lang === 'asm' ? 'arm64' : lang;
+  const d = await loadDocs(dl);
+  if (!d.all.length) return [];
+  if (!firstSeen[dl]) {
+    const seen = new Map();
+    for (const p of problems) {
+      let t;
+      try { t = textOf(p, lang); } catch { continue; }
+      if (!t) continue;
+      for (const e of entriesIn(d, t, dl)) if (!seen.has(e)) seen.set(e, p.id);
+    }
+    firstSeen[dl] = seen;
+  }
+  const seen = firstSeen[dl];
+  return [...seen].filter(([, id]) => id === problem.id).map(([e]) => e).slice(0, 8);
+}
+
+/** Markdown card for the description panel. */
+export function entryCard(lang, e) {
+  const dl = lang === 'asm' ? 'arm64' : lang;
+  const from = providedBy(dl, e);
+  const q = e.owner ? `${e.owner}${SEP[dl] || '::'}${e.name}` : e.name;
+  return [
+    `**\`${q}\`**${from ? ` · from \`${from}\`` : ''}`,
+    fence(dl, e.sig || e.name),
+    e.doc || '',
+    e.returns ? `**Returns** ${e.returns}` : '',
+    e.example ? '**Usage**\n' + fence(dl, e.example) : '',
+  ].filter(Boolean).join('\n\n');
 }

@@ -2,7 +2,7 @@
 """Crucible companion: serves the site locally and adds what a browser can't do.
 
   GET  /api/health   toolchain + Apple Intelligence status
-  POST /api/run      compile and run code (C, C++, Rust, ARM64 asm, ESPresso, Python)
+  POST /api/run      compile and run code (C, C++, Rust, ARM64/x86-64 asm, ESPresso, Python)
   POST /api/ai       stream a response from the on-device Apple Intelligence model
   GET  /bridge       popup that relays API calls for a hosted copy of the site via
                      postMessage (Safari blocks https pages from fetching http://localhost)
@@ -106,6 +106,18 @@ def tool_version(cmd: list[str]) -> str | None:
 _health_cache: dict | None = None
 
 
+def x86_toolchain() -> str | None:
+    """x86-64 builds natively on Intel Macs and run under Rosetta 2 on Apple Silicon."""
+    v = tool_version(["clang", "--version"])
+    if not v or os.uname().machine == "x86_64":
+        return v
+    try:
+        ok = subprocess.run(["arch", "-x86_64", "/usr/bin/true"], capture_output=True, timeout=10).returncode == 0
+    except Exception:  # noqa: BLE001
+        ok = False
+    return f"{v} (Rosetta 2)" if ok else None
+
+
 def health() -> dict:
     global _health_cache
     if _health_cache is None:
@@ -115,6 +127,7 @@ def health() -> dict:
             "cpp": tool_version(["clang++", "--version"]),
             "rust": tool_version(["rustc", "--version"]),
             "asm": tool_version(["clang", "--version"]) if os.uname().machine == "arm64" else None,
+            "x86": x86_toolchain(),
             "espresso": find_espresso(),
         }
         ai = {"available": False, "reason": "AI helper not built (run ./crucible build)"}
@@ -202,10 +215,11 @@ def execute(req: dict) -> dict:
             comp = compile_step(["rustc", "--edition", "2021", "-C", "opt-level=1", "-C", "debuginfo=1", "-A", "unused", "-A", "dead_code", "main.rs", "-o", "prog"], d)
             cmd = ["./prog"]
             env["RUST_BACKTRACE"] = "0"
-        elif lang == "asm":
+        elif lang in ("asm", "x86"):
             Path(d, "harness.c").write_text(source)
             Path(d, "solution.s").write_text(req.get("asm", ""))
-            comp = compile_step(["clang", "-g", "-O0", "-Wno-unused-function", "harness.c", "solution.s", "-o", "prog", "-lm"], d)
+            arch = ["-arch", "x86_64"] if lang == "x86" else []
+            comp = compile_step(["clang", *arch, "-g", "-O0", "-Wno-unused-function", "harness.c", "solution.s", "-o", "prog", "-lm"], d)
             cmd = ["./prog"]
         elif lang == "espresso":
             esp = find_espresso()

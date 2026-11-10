@@ -18,8 +18,9 @@ export default [
       { label: 'heap', doc: 'a list maintained as a min-heap' },
       { label: 'item', doc: 'value to push' },
     ],
+    returns: 'None (the heap is modified in place)',  // REQUIRED for function/method/macro: return type + meaning
     doc: 'Push *item* onto *heap*, keeping the min-heap invariant. **O(log n)**.',  // markdown, 1–3 sentences, practical
-    example: 'h = []\nheapq.heappush(h, 5)',  // optional short code (≤ 4 lines)
+    example: 'h = []\nheapq.heappush(h, 5)',  // REQUIRED: realistic usage, 1–4 lines, valid code
     insert: 'heappush(${1:heap}, ${2:item})', // optional Monaco snippet inserted on completion (default: name)
     header: 'import heapq',      // optional: required import/#include/use line (shown in hover)
   },
@@ -27,6 +28,7 @@ export default [
 ```
 
 Guidelines
+- Every entry needs `example`; function/method/macro entries need `returns`; every parameter in `sig` should have a `params` entry. Validate with `node tools/check_langdocs.mjs <lang>`.
 - Accuracy over volume; these are shown to learners. Mention complexity where it matters and the classic gotcha (e.g. `list.sort()` returns None, `strcpy` overflow, `Vec::remove` is O(n), `HashMap::get` returns Option<&V>).
 - Cover what competitive / interview-style solutions actually use, plus language keywords (kind 'keyword', with a short doc and a snippet `insert` for block constructs like for/while/if/match/fn).
 - Use template literals or plain strings; keep the file valid JS (node --check must pass) and export a plain array.

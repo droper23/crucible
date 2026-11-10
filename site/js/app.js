@@ -5,10 +5,11 @@ import { LANGS, languagesFor, starterCode, buildRun, parseRun, signature, format
 import { createEditor, monacoTheme, loadMonaco } from './editor.js';
 import { md, renderMd, enhance, esc } from './md.js';
 import { mountCoach } from './coach.js';
-import { setIdeContext, parseDiagnostics, showDiagnostics, clearDiagnostics, trackDiagnosticEdits } from './ide.js';
+import { setIdeContext, introducedEntries, entryCard, parseDiagnostics, showDiagnostics, clearDiagnostics, trackDiagnosticEdits } from './ide.js';
 
 const DIFF = ['First Steps', 'Easy', 'Medium', 'Hard', 'Expert'];
-const LANG_SHORT = { python: 'PY', c: 'C', cpp: 'C++', rust: 'RS', espresso: 'ESP', asm: 'ASM' };
+const hintsFor = (p, lang) => (lang === 'x86' && p.x86_hints?.length ? p.x86_hints : p.hints);
+const LANG_SHORT = { python: 'PY', c: 'C', cpp: 'C++', rust: 'RS', espresso: 'ESP', asm: 'ARM', x86: 'x86' };
 const $app = document.getElementById('app');
 let DATA = null;
 let byId = new Map();
@@ -287,7 +288,7 @@ async function pageProblem(id) {
     <section class="pane ws-left" data-left>
       <div class="tabs" data-ltabs>
         <button class="tab on" data-tab="desc">Description</button>
-        <button class="tab" data-tab="hints">Hints <span class="badge">${p.hints.length}</span></button>
+        <button class="tab" data-tab="hints">Hints <span class="badge">${hintsFor(p, lang).length}</span></button>
         <button class="tab" data-tab="solution">Solution</button>
         <button class="tab" data-tab="coach">✦ Coach</button>
         <button class="tab" data-tab="subs">Submissions</button>
@@ -382,19 +383,28 @@ async function pageProblem(id) {
         <div class="row">${diffPill(p.difficulty)}<a class="pill" href="#/track/${t.id}">${esc(t.icon || '')} ${esc(t.title)}</a>${store.isSolved(p.id) ? '<span class="pill" style="color:var(--ok)">✓ Solved</span>' : ''}${p.tags.map((x) => `<span class="pill tag">${esc(x)}</span>`).join('')}</div>
       </div>
       <div class="md" data-st></div>
+      ${lang === 'x86' && p.lang_notes?.x86 ? `<div class="example" style="border-color:var(--accent)"><h4>x86-64 version</h4><div class="md">${md(p.lang_notes.x86)}</div></div>` : ''}
       ${sig ? `<div class="sig">${esc(sig)}</div>` : ''}
       ${p.tests.slice(0, p.examples).map(exampleHTML).join('')}
       ${p.constraints.length ? `<h4 style="margin:20px 0 6px">Constraints</h4><ul class="md constraints">${p.constraints.map((c) => `<li>${md(c).replace(/^<p>|<\/p>\n?$/g, '')}</li>`).join('')}</ul>` : ''}
-      ${p.lang_notes?.[lang] ? `<div class="example" style="margin-top:18px"><h4>${LANGS[lang].label} notes</h4><div class="md">${md(p.lang_notes[lang])}</div></div>` : ''}
+      ${p.lang_notes?.[lang] && lang !== 'x86' ? `<div class="example" style="margin-top:18px"><h4>${LANGS[lang].label} notes</h4><div class="md">${md(p.lang_notes[lang])}</div></div>` : ''}
+      <div data-intro></div>
       <div style="margin-top:22px;font-size:12.5px;color:var(--muted)">Available in: ${langs.map((l) => LANGS[l].label).join(' · ')}</div>`;
     renderMd(lbody.querySelector('[data-st]'), p.statement);
     enhance(lbody);
+    const intro = lbody.querySelector('[data-intro]');
+    const forLang = lang;
+    introducedEntries(DATA.problems, p, lang, (q, l) => (languagesFor(q).includes(l) ? `${starterCode(q, l)}\n${q.lang_notes?.[l] || ''}` : '')).then((es) => {
+      if (!es.length || forLang !== lang || !intro.isConnected) return;
+      intro.innerHTML = `<div class="example intro" style="margin-top:18px"><h4>New in this problem · ${LANGS[lang].label}</h4>${es.map((e) => `<div class="md intro-card">${md(entryCard(lang, e))}</div>`).join('')}</div>`;
+      enhance(intro);
+    }).catch(() => {});
   }
 
   function renderHints() {
     const opened = store.hintsOpened(p.id);
     lbody.innerHTML = `<p class="sub" style="margin-bottom:12px">Hints get progressively more specific. Open one at a time and give it a real try in between.</p>` +
-      p.hints.map((x, i) => `<details class="hint" ${i < opened ? 'open' : ''} data-h="${i}"><summary>Hint ${i + 1}</summary><div class="md">${md(x)}</div></details>`).join('');
+      hintsFor(p, lang).map((x, i) => `<details class="hint" ${i < opened ? 'open' : ''} data-h="${i}"><summary>Hint ${i + 1}</summary><div class="md">${md(x)}</div></details>`).join('');
     lbody.querySelectorAll('details').forEach((d) => d.addEventListener('toggle', () => { if (d.open) store.openHint(p.id, Number(d.dataset.h) + 1); }));
     enhance(lbody);
   }
@@ -406,14 +416,14 @@ async function pageProblem(id) {
       return;
     }
     const sols = [['python', p.kind === 'asm' ? null : p.solution], ...Object.entries(p.refs || {})].filter(([, c]) => c);
-    if (p.kind === 'asm') sols.unshift(['asm', p.asm_solution]);
+    if (p.kind === 'asm') sols.unshift(['asm', p.asm_solution], ...(p.x86_solution ? [['x86', p.x86_solution]] : []));
     let cur = sols.find(([l]) => l === lang)?.[0] || sols[0][0];
     lbody.innerHTML = `<div class="md" data-ex></div><h2 style="font-size:18px;margin:28px 0 8px">Reference solution</h2><div class="sol-langs" data-sl></div><div class="md" data-code></div>`;
-    renderMd(lbody.querySelector('[data-ex]'), p.explanation);
+    renderMd(lbody.querySelector('[data-ex]'), lang === 'x86' && p.x86_explanation ? p.x86_explanation : p.explanation);
     const drawSol = () => {
       lbody.querySelector('[data-sl]').innerHTML = sols.map(([l]) => `<button class="chip ${l === cur ? '' : ''}" style="${l === cur ? 'border-color:var(--accent);color:var(--text)' : ''}" data-l="${l}">${LANGS[l].label}</button>`).join('');
       const code = sols.find(([l]) => l === cur)[1];
-      renderMd(lbody.querySelector('[data-code]'), '```' + ({ asm: 'asm', espresso: 'javascript' }[cur] || cur) + '\n' + code + '\n```');
+      renderMd(lbody.querySelector('[data-code]'), '```' + ({ asm: 'asm', x86: 'x86', espresso: 'javascript' }[cur] || cur) + '\n' + code + '\n```');
     };
     lbody.querySelector('[data-sl]').onclick = (e) => { const b = e.target.closest('[data-l]'); if (b) { cur = b.dataset.l; drawSol(); } };
     drawSol();
@@ -701,7 +711,7 @@ function celebrate(big) {
 }
 
 // ------------------------------------------------------------------ cheat sheets
-const CS_ORDER = ['python', 'c', 'cpp', 'rust', 'espresso', 'asm'];
+const CS_ORDER = ['python', 'c', 'cpp', 'rust', 'espresso', 'asm', 'x86'];
 const csCache = new Map();
 async function loadCheat(lang) {
   if (!csCache.has(lang)) {

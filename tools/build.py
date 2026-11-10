@@ -30,7 +30,7 @@ OUT = ROOT / "site" / "data" / "problems.json"
 TYPE_RE = re.compile(r"^(int|float|bool|str)(\[\]){0,2}$")
 DIFFS = {0: "First Steps", 1: "Easy", 2: "Medium", 3: "Hard", 4: "Expert"}
 COMPARES = {"exact", "unordered", "unordered_deep"}
-LANGS = {"python", "c", "cpp", "rust", "espresso", "asm"}
+LANGS = {"python", "c", "cpp", "rust", "espresso", "asm", "x86"}
 
 PRELUDE = r'''
 import math, sys
@@ -324,7 +324,7 @@ def find_leaks(p) -> list[tuple[str, int, str]]:
     sols = _solution_lines(p.get("solution", ""), "#")
     for lang, code in (p.get("refs") or {}).items():
         sols += _solution_lines(code, "//")
-    asm = _solution_lines(p.get("asm_solution", ""), "//")
+    asm = _solution_lines(p.get("asm_solution", ""), "//") + _solution_lines(p.get("x86_solution", ""), "#")
     fields = []
     for lang, s in (p.get("starters") or {}).items():
         # Starter *code* is deliberate scaffolding (declarations, reads); only its
@@ -337,6 +337,8 @@ def find_leaks(p) -> list[tuple[str, int, str]]:
         fields.append((f"lang_notes[{lang}]", s, sols + asm))
     for i, h in enumerate((p.get("hints") or [])[:-1]):
         fields.append((f"hints[{i}]", h, sols))
+    for i, h in enumerate((p.get("x86_hints") or [])[:-1]):
+        fields.append((f"x86_hints[{i}]", h, sols + asm))
     found = []
     for name, text, cand in fields:
         if not cand:

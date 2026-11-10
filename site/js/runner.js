@@ -125,6 +125,7 @@ export function unavailableReason(lang) {
   if (!v) {
     if (lang === 'espresso') return 'ESPresso binary not found. Build ESPresso or set CRUCIBLE_ESPRESSO, then restart the companion.';
     if (lang === 'asm') return 'ARM64 assembly needs an Apple Silicon Mac with clang.';
+    if (lang === 'x86') return 'x86-64 assembly needs clang plus Rosetta 2 on Apple Silicon (softwareupdate --install-rosetta), then restart the companion.';
     return `The companion couldn't find a ${lang} toolchain.`;
   }
   return null;
@@ -184,7 +185,7 @@ async function runPyodide(req, onStatus) {
 }
 
 async function runCompanion(req, onStatus) {
-  onStatus?.(['c', 'cpp', 'rust', 'asm'].includes(req.lang) ? 'Compiling & running…' : 'Running…');
+  onStatus?.(['c', 'cpp', 'rust', 'asm', 'x86'].includes(req.lang) ? 'Compiling & running…' : 'Running…');
   const j = await api('/api/run', req);
   if (j.error) throw new Error(j.error);
   return j;

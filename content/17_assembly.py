@@ -1,13 +1,13 @@
-"""ARM64 Assembly track: fill-in-the-blanks AArch64 for Apple Silicon macOS."""
+"""Assembly track: fill-in-the-blanks AArch64 (Apple Silicon) and x86-64 (AT&T syntax) for macOS."""
 
 import random
 
 TRACK = dict(
     id="assembly",
-    title="ARM64 Assembly",
+    title="Assembly: ARM64 & x86-64",
     order=17,
     icon="⚙",
-    blurb="Write the machine's own language: registers, flags, loads, loops and stack frames on Apple Silicon.",
+    blurb="Write the machine's own language: registers, flags, loads, loops and stack frames, in ARM64 (Apple Silicon) or x86-64 (Intel).",
     intro=r"""Every program you have written so far eventually becomes a list of
 **instructions**: tiny, fixed-size commands the CPU executes one after another.
 In this track you write those instructions yourself, in **AArch64** (64-bit ARM)
@@ -214,11 +214,113 @@ right after `ret` means `x30` or `sp` was not restored.
 
 Start slow: the first problems are one instruction each. By the end you will write
 sorting loops and a recursive function that manages its own stack frame.
+
+## x86-64 (AT&T syntax)
+
+Every problem also comes in an **x86-64** version, the instruction set of Intel Macs
+and most PCs. Switch the language in the editor to get the x86 starter; your file is
+built with `clang -arch x86_64` and runs under Rosetta 2. The problem statements
+describe the ARM registers, so each x86 version has its own notes with the register
+mapping. The syntax is the **AT&T** flavour that clang and GNU tools use by default:
+
+* **Source first, destination last**: `movq %rsi, %rax` copies `rsi` into `rax`
+  (the reverse of ARM and of Intel syntax).
+* **Two operands**: `addq %rsi, %rax` means `rax = rax + rsi`. The destination is
+  also a source, so copy a value first if you still need it.
+* Registers start with `%`, immediates with `$` (`$42`, `$0x20`, `$'a'`). A bare
+  number is a **memory address**.
+* A **size suffix** on the mnemonic: `b` (byte), `w` (16-bit word), `l` (32-bit long),
+  `q` (64-bit quad). Our `long long`s are all `q`.
+* Comments start with `#`; labels and directives work as on ARM, except
+  `.p2align 4` (16-byte function alignment, since x86 instructions are 1 to 15 bytes long).
+
+**Memory operands** are written `disp(base, index, scale)` and mean
+`base + index*scale + disp`, with scale 1, 2, 4 or 8:
+
+| syntax | address | typical use |
+|---|---|---|
+| `(%rdi)` | `rdi` | `*p` |
+| `16(%rdi)` | `rdi + 16` | `p[2]` for 8-byte elements |
+| `(%rdi,%rcx,8)` | `rdi + rcx*8` | `nums[i]` |
+| `-8(%rdi,%rsi,8)` | `rdi + rsi*8 - 8` | `&nums[count-1]` with `lea` |
+
+Most instructions accept **one** memory operand directly (`addq (%rdi), %rax` loads
+and adds in one go); there is no post-increment, so advance pointers with `addq $8, %rdi`.
+`lea` computes an address expression *without* reading memory, which doubles as a
+three-operand add. Load bytes with `movzbq` (zero-extend byte to 64 bits).
+
+### Registers
+
+| 64-bit | 32-bit | 16-bit | 8-bit | 64-bit | 32-bit | 16-bit | 8-bit |
+|---|---|---|---|---|---|---|---|
+| `rax` | `eax` | `ax` | `al` | `r8` | `r8d` | `r8w` | `r8b` |
+| `rbx` | `ebx` | `bx` | `bl` | `r9` | `r9d` | `r9w` | `r9b` |
+| `rcx` | `ecx` | `cx` | `cl` | `r10` | `r10d` | `r10w` | `r10b` |
+| `rdx` | `edx` | `dx` | `dl` | `r11` | `r11d` | `r11w` | `r11b` |
+| `rsi` | `esi` | `si` | `sil` | `r12` | `r12d` | `r12w` | `r12b` |
+| `rdi` | `edi` | `di` | `dil` | `r13` | `r13d` | `r13w` | `r13b` |
+| `rbp` | `ebp` | `bp` | `bpl` | `r14` | `r14d` | `r14w` | `r14b` |
+| `rsp` | `esp` | `sp` | `spl` | `r15` | `r15d` | `r15w` | `r15b` |
+
+As on ARM, writing a **32-bit** register (`movl $0, %eax`, `xorl %edx, %edx`) zeroes
+the upper 32 bits. Writing an 8- or 16-bit register does **not**: the other bytes keep
+their old contents. There is no zero register; `xorl %eax, %eax` is the idiom for 0.
+
+### The calling convention (System V AMD64)
+
+| registers | role | who must preserve them |
+|---|---|---|
+| `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9` | arguments 1–6, in that order | nobody (caller-saved) |
+| `rax` | **return value** | nobody |
+| `r10`, `r11` | scratch | nobody |
+| `rbx`, `rbp`, `r12`–`r15` | long-lived values | **you** (callee-saved) |
+| `rsp` | stack pointer, **16-byte aligned at every `call`** | you |
+
+`call` pushes the return address onto the stack and `ret` pops it, so there is no link
+register. On entry `rsp` is therefore 8 bytes off alignment: a function that calls
+others must push an odd number of 8-byte values (e.g. `pushq %rbp` plus two more)
+before its first `call`, and pop them in reverse order before `ret`.
+
+### Flags, jumps, `cmov` and `setcc`
+
+Almost every arithmetic instruction sets the flags (ZF, SF, CF, OF). `cmpq src, dst`
+computes `dst - src`; `testq src, dst` computes `dst & src` (`testq %rax, %rax` asks
+"is rax zero?"). Note the order: after `cmpq %rsi, %rdi`, `jl` jumps if `rdi < rsi`.
+
+| you mean | signed | unsigned |
+|---|---|---|
+| `==` / `!=` | `e` / `ne` (also `z` / `nz`) | `e` / `ne` |
+| `<` | `l` | `b` (below) |
+| `<=` | `le` | `be` |
+| `>` | `g` | `a` (above) |
+| `>=` | `ge` | `ae` |
+
+The condition goes after the stem: `jCC label` jumps (`jmp` is unconditional),
+`cmovCCq src, dst` copies only if the condition holds (branch-free select), and
+`setCC %al` writes the byte 1 or 0 (widen with `movzbq %al, %rax`). Multiplication is
+two-operand `imulq src, dst`; division is `divq`/`idivq src`, which divides the 128-bit
+`rdx:rax` and leaves the quotient in `rax` and the remainder in `rdx` (clear `rdx` first,
+or `cqto` for signed).
+
+### Reading clang's x86 errors
+
+* **invalid operand for instruction**: suffix and register size disagree
+  (`addq %eax, %rbx`), operands in Intel order, an immediate as destination, or two
+  memory operands.
+* **unknown token in expression**: usually a missing `%` or `$`.
+* **invalid instruction mnemonic 'xyz'**: a typo or an ARM habit (`ldr`, `cbz`, `b.eq`).
+* **Undefined symbols for architecture x86_64: "_name"**: check `.globl` and the underscore.
+* **ambiguous instructions require an explicit suffix**: a memory operand with an
+  immediate (`cmp $0, (%rsi)`) needs `b`/`w`/`l`/`q`.
+
+A segmentation fault often means a missing `$` (a constant used as an address) or a
+missing pair of parentheses; a crash inside a `call` usually means `rsp` was not
+16-byte aligned.
 """,
 )
 
 
-def _starter(sol, todos):
+def _starter(sol, todos, comment="//"):
     """Replace each instruction line starting with `needle` by a `// TODO(n): text` line."""
     lines = sol.split("\n")
     for n, (needle, text) in enumerate(todos, 1):
@@ -226,7 +328,7 @@ def _starter(sol, todos):
         assert len(hits) == 1, (needle, hits)
         i = hits[0]
         indent = lines[i][: len(lines[i]) - len(lines[i].lstrip())]
-        lines[i] = f"{indent}// TODO({n}): {text}"
+        lines[i] = f"{indent}{comment} TODO({n}): {text}"
     return "\n".join(lines)
 
 
@@ -238,6 +340,15 @@ PROBLEMS = []
 def _add(p, todos):
     p["kind"] = "asm"
     p["asm_starter"] = _starter(p["asm_solution"], todos)
+    x = p.pop("x86", None)
+    if x:
+        # x86-64 (AT&T syntax) version of the same problem: x86=dict(solution, todos,
+        # notes, hints, explanation). Notes become the x86 language notes.
+        p["x86_solution"] = x["solution"]
+        p["x86_starter"] = _starter(x["solution"], x["todos"], "#")
+        p["x86_hints"] = x["hints"]
+        p["x86_explanation"] = x["explanation"]
+        p.setdefault("lang_notes", {})["x86"] = x["notes"]
     PROBLEMS.append(p)
 
 
@@ -325,6 +436,60 @@ Large constants: `mov` can only encode 16-bit chunks (plus some patterns). The a
 expands `mov x0, #0x12345678` into `movz x0, #0x5678` then `movk x0, #0x1234, lsl #16`.
 Try a constant that needs more than one chunk and read the error, or the disassembly
 with `objdump -d`.""",
+    x86=dict(
+        solution="""# long long the_answer(long long x)
+# On entry: rdi = x (ignored)      On exit: rax = 42
+.text                          # the following lines are code
+.globl _the_answer             # export the symbol so the C harness can link to it
+.p2align 4                     # align to 16 bytes (x86 instructions vary in length; 16 is the usual choice)
+_the_answer:                   # the label marks the function's first instruction
+    movq $42, %rax             # write the return value into rax (the argument in rdi is ignored)
+    ret                        # pop the return address off the stack and jump to it
+""",
+        todos=[("movq $42, %rax", "put the constant 42 into the return register rax")],
+        notes="""**On entry:** `%rdi = x` (ignore it). **On exit:** `%rax = 42`.
+
+On x86-64 the first argument arrives in `%rdi`, but the result goes back in a
+*different* register, `%rax`. AT&T syntax writes the source first and the
+destination last, registers start with `%` and constants with `$`:
+`movq $7, %rcx` puts 7 into `rcx`.""",
+        hints=[
+            "The result must be in `%rax`; the argument in `%rdi` can stay where it is.",
+            "`mov` with a `q` suffix copies 64 bits. Constants take a `$`, and the destination comes last.",
+            "`movq $42, %rax`",
+        ],
+        explanation="""## Intuition
+
+The caller executes `call _the_answer`, which pushes the return address on the stack.
+When your code executes `ret`, the caller reads **whatever is in `%rax`** as the result.
+So "return 42" means "make `%rax` equal 42, then `ret`".
+
+## Approach
+
+| step | instruction | rdi | rax |
+|---|---|---|---|
+| entry | | 7 | garbage |
+| 1 | `movq $42, %rax` | 7 | 42 |
+| 2 | `ret` | | **42** |
+
+* `.p2align 4` pads to 2⁴ = 16 bytes. x86 instructions are 1 to 15 bytes long and need
+  no alignment, but function entries are conventionally 16-byte aligned.
+* `movq $42, %rax`: `q` (quadword) means 64 bits, `$42` is an immediate, `%rax` is the
+  destination. AT&T always reads **source, destination**.
+* `ret` pops the return address that `call` pushed and jumps there.
+
+## Complexity
+
+O(1).
+
+## Common mistakes
+
+* **Intel order.** `movq %rax, $42` tries to write *into* a constant: clang reports
+  `invalid operand for instruction`.
+* **Forgetting `$`.** `movq 42, %rax` loads the 8 bytes at **memory address 42**: a
+  segmentation fault.
+* **Returning in `%rdi`.** The argument register is not the return register on x86-64.""",
+    ),
 ), [("mov x0, #42", "put the constant 42 into the return register x0")])
 
 # ---------------------------------------------------------------- 2. add
@@ -399,6 +564,60 @@ O(1).
 
 `adds` is `add` that also sets the flags. After `adds x0, x0, x1`, `b.vs` branches on
 signed overflow and `b.cs` on unsigned carry: this is how checked arithmetic is built.""",
+    x86=dict(
+        solution="""# long long add_two(long long a, long long b)
+# On entry: rdi = a, rsi = b       On exit: rax = a + b
+.text                          # code section
+.globl _add_two                # export the symbol to the linker
+.p2align 4                     # 16-byte function alignment
+_add_two:                      # function entry
+    movq %rdi, %rax            # rax = a (copy the first argument into the return register)
+    addq %rsi, %rax            # rax = rax + b (AT&T: add source into destination)
+    ret                        # return; the caller reads the result from rax
+""",
+        todos=[("addq %rsi, %rax", "add b into rax, which already holds a")],
+        notes="""**On entry:** `%rdi = a`, `%rsi = b`. **On exit:** `%rax = a + b`.
+
+x86 arithmetic has only **two** operands: `op src, dst` means `dst = dst op src`. So
+you first copy one value into the destination, then combine the other into it
+(for example `subq %rcx, %rdx` computes `rdx = rdx - rcx`).""",
+        hints=[
+            "`%rax` already holds a copy of `a`. Only `b` still needs to go in.",
+            "Two-operand form: the destination is also the first source, and it is written last.",
+            "`addq %rsi, %rax`",
+        ],
+        explanation="""## Intuition
+
+`a` is in `%rdi`, `b` in `%rsi`, and the result must be in `%rax`. Copy `a` into
+`%rax`, then add `b` into it.
+
+## Approach
+
+| step | instruction | rdi | rsi | rax |
+|---|---|---|---|---|
+| entry | | 3 | 4 | ? |
+| 1 | `movq %rdi, %rax` | 3 | 4 | 3 |
+| 2 | `addq %rsi, %rax` | 3 | 4 | **7** |
+
+`addq src, dst` reads both, adds, and overwrites `dst`. It also sets the flags (x86
+arithmetic always does), which we ignore here.
+
+## Complexity
+
+O(1).
+
+## Common mistakes
+
+* **Reversed operands.** `addq %rax, %rsi` leaves the sum in `%rsi`.
+* **32-bit names.** `addl %esi, %eax` adds only the low halves and zeroes the top
+  of `%rax`: the `10¹²` tests fail.
+* **Suffix/register mismatch.** `addq %esi, %rax` is rejected: `invalid operand for instruction`.
+
+## Going further
+
+`leaq (%rdi,%rsi), %rax` computes the same sum in one instruction using the
+address-computation unit, without touching the flags.""",
+    ),
 ), [("add x0, x0, x1", "add the two arguments and leave the sum in x0")])
 
 # ---------------------------------------------------------------- 3. mul/sub
@@ -480,6 +699,56 @@ ARM fuses this pattern: `madd Xd, Xn, Xm, Xa` computes `Xa + Xn*Xm` and
 `msub Xd, Xn, Xm, Xa` computes `Xa - Xn*Xm` in one instruction. `mul` itself is
 actually an alias for `madd Xd, Xn, Xm, xzr`. Can you rewrite this function as
 `mneg` + `add`, or as `msub` followed by `neg`?""",
+    x86=dict(
+        solution="""# long long mul_sub(long long a, long long b, long long c)
+# On entry: rdi = a, rsi = b, rdx = c       On exit: rax = a*b - c
+.text                          # code section
+.globl _mul_sub                # export the symbol
+.p2align 4                     # 16-byte alignment
+_mul_sub:                      # function entry
+    movq %rdi, %rax            # rax = a
+    imulq %rsi, %rax           # rax = a * b (two-operand signed multiply, low 64 bits)
+    subq %rdx, %rax            # rax = rax - c (sub src, dst computes dst - src)
+    ret                        # return rax
+""",
+        todos=[("imulq %rsi, %rax", "multiply rax (a copy of a) by b"),
+               ("subq %rdx, %rax", "subtract c from the product in rax")],
+        notes="""**On entry:** `%rdi = a`, `%rsi = b`, `%rdx = c`. **On exit:** `%rax = a*b - c`.
+
+Use the **two-operand** `imulq src, dst` (`dst *= src`). The one-operand `mulq`/`imulq`
+form multiplies by `%rax` and writes a 128-bit result into `%rdx:%rax`, which would
+destroy `c`. Careful with `sub`: `subq %rcx, %r8` computes `r8 = r8 - rcx`.""",
+        hints=[
+            "Work in `%rax`: it already holds `a`. Multiply first, then subtract.",
+            "Two-operand `imul` multiplies the destination by the source. `sub src, dst` subtracts the *source* from the destination.",
+            "`imulq %rsi, %rax` then `subq %rdx, %rax`",
+        ],
+        explanation="""## Intuition
+
+Build the answer in place in `%rax`: copy `a`, multiply by `b`, subtract `c`.
+
+## Approach
+
+| step | instruction | rax | rsi | rdx |
+|---|---|---|---|---|
+| entry | | ? | 4 | 5 |
+| 1 | `movq %rdi, %rax` (a = 3) | 3 | 4 | 5 |
+| 2 | `imulq %rsi, %rax` | 12 | 4 | 5 |
+| 3 | `subq %rdx, %rax` | **7** | 4 | 5 |
+
+The low 64 bits of a product are the same for signed and unsigned operands, so the
+two-operand `imulq` is the general-purpose multiply.
+
+## Complexity
+
+O(1).
+
+## Common mistakes
+
+* **`subq %rax, %rdx`** computes `c - a*b` and leaves it in `%rdx`.
+* **One-operand `mulq %rsi`**: it overwrites `%rdx` (holding `c`) with the high half.
+* **Clobbering an argument you still need** before you have used it.""",
+    ),
 ), [("mul x8, x0, x1", "multiply a (x0) by b (x1) and store the product in the scratch register x8")])
 
 # ---------------------------------------------------------------- 4. abs
@@ -563,6 +832,62 @@ O(1), and branch-free: no misprediction is possible.
 A classic branch-free trick without conditional instructions:
 `asr x1, x0, #63` (all ones if negative, else zero), then `eor x0, x0, x1` and
 `sub x0, x0, x1`. Trace it for `x = -5`.""",
+    x86=dict(
+        solution="""# long long abs_value(long long x)
+# On entry: rdi = x       On exit: rax = |x|
+.text                          # code section
+.globl _abs_value              # export the symbol
+.p2align 4                     # 16-byte alignment
+_abs_value:                    # function entry
+    movq %rdi, %rax            # rax = x (the answer if x >= 0)
+    movq %rdi, %rcx            # rcx = x
+    negq %rcx                  # rcx = -x (the answer if x < 0)
+    cmpq $0, %rdi              # set flags from x - 0
+    cmovlq %rcx, %rax          # if signed-less-than: rax = -x, otherwise keep x
+    ret                        # return |x|
+""",
+        todos=[("cmovlq %rcx, %rax", "if the comparison said x < 0 (signed), replace rax with the negated copy in rcx")],
+        notes="""**On entry:** `%rdi = x`. **On exit:** `%rax = |x|`.
+
+x86 has no conditional negate, but it has **conditional move**: `cmovCCq src, dst`
+copies `src` into `dst` only if condition `CC` holds (`e`, `ne`, `l`, `le`, `g`, `ge`
+for signed; `b`, `be`, `a`, `ae` for unsigned). Prepare both candidates, compare,
+then pick. Example: `cmovgq %r8, %r9` copies r8 into r9 if the last compare said
+"greater".""",
+        hints=[
+            "Both candidates are ready: `x` in `%rax`, `-x` in `%rcx`. You only need to pick.",
+            "A conditional move copies only when its condition holds; signed less-than is `l`.",
+            "`cmovlq %rcx, %rax`",
+        ],
+        explanation="""## Intuition
+
+Compute both possible answers, then let a branch-free conditional move keep the right
+one: no jumps, so no branch misprediction.
+
+## Approach
+
+| step | instruction | rax | rcx | flags |
+|---|---|---|---|---|
+| entry (x = −5) | | ? | ? | |
+| 1 | `movq %rdi, %rax` | −5 | | |
+| 2 | `movq %rdi, %rcx` | −5 | −5 | |
+| 3 | `negq %rcx` | −5 | 5 | |
+| 4 | `cmpq $0, %rdi` | −5 | 5 | less (signed) |
+| 5 | `cmovlq %rcx, %rax` | **5** | 5 | |
+
+The compare comes *after* `negq` because `neg` also writes the flags.
+
+## Complexity
+
+O(1).
+
+## Common mistakes
+
+* **Comparing first, negating after**: `negq` overwrites the flags the `cmov` needs.
+* **Unsigned condition** (`cmovbq`): no value is "below" 0 unsigned, so negatives stay negative.
+* **`cmov` with an immediate**: `cmovlq $0, %rax` is not encodable; the source must be
+  a register or memory.""",
+    ),
 ), [("cneg x0, x0, lt", "if the comparison said x0 < 0 (signed), replace x0 with -x0; otherwise keep it")])
 
 # ---------------------------------------------------------------- 5. max
@@ -636,6 +961,53 @@ O(1).
 `min` is the same with `lt`. Clamp `x` to `[lo, hi]` with two `cmp`/`csel` pairs.
 Newer cores (ARMv8.9 / FEAT_CSSC) even add `smax`/`smin` instructions, but Apple's
 toolchain targets older baselines by default.""",
+    x86=dict(
+        solution="""# long long max_of_two(long long a, long long b)
+# On entry: rdi = a, rsi = b       On exit: rax = max(a, b)
+.text                          # code section
+.globl _max_of_two             # export the symbol
+.p2align 4                     # 16-byte alignment
+_max_of_two:                   # function entry
+    movq %rdi, %rax            # rax = a (assume a is the larger)
+    cmpq %rsi, %rdi            # flags from a - b (AT&T cmp src, dst computes dst - src)
+    cmovleq %rsi, %rax         # if a <= b (signed): rax = b
+    ret                        # return the larger value
+""",
+        todos=[("cmovleq %rsi, %rax", "if a is not greater than b (signed), replace rax with b")],
+        notes="""**On entry:** `%rdi = a`, `%rsi = b`. **On exit:** `%rax = max(a, b)`.
+
+AT&T `cmpq src, dst` sets the flags from **`dst - src`**, so the condition reads
+"dst *cond* src": after `cmpq %r8, %r9`, `l` means r9 < r8. Pair it with a
+conditional move (`cmovCCq src, dst`) to pick a value without a jump.""",
+        hints=[
+            "`%rax` starts as `a`. When should it be replaced by `b`?",
+            "After the compare, the condition is about `a` relative to `b`. Use a signed condition (`l`, `le`, `g`, `ge`).",
+            "`cmovleq %rsi, %rax`",
+        ],
+        explanation="""## Intuition
+
+Assume `a` wins, then overwrite it with `b` in the cases where it does not.
+
+## Approach
+
+| step | instruction | rax | flags |
+|---|---|---|---|
+| entry (a = 3, b = 9) | | | |
+| 1 | `movq %rdi, %rax` | 3 | |
+| 2 | `cmpq %rsi, %rdi` | 3 | 3 − 9 < 0: `l`, `le` true |
+| 3 | `cmovleq %rsi, %rax` | **9** | |
+
+When `a == b` it does not matter which one is kept: both are the answer.
+
+## Complexity
+
+O(1).
+
+## Common mistakes
+
+* **Reading `cmp` in Intel order.** `cmpq %rsi, %rdi` compares `a` to `b` (a − b), not b to a.
+* **Unsigned conditions** (`cmovbeq`): −1 then looks larger than everything.""",
+    ),
 ), [("csel x0, x0, x1, gt", "select a if it is greater (signed) than b, otherwise b, into x0")])
 
 # ---------------------------------------------------------------- 6. is_even
@@ -712,6 +1084,56 @@ O(1).
 `tst` with other masks answers other questions: `tst x0, #7` + `cset eq` tests divisibility
 by 8. Branch on a single bit with no flags at all: `tbz x0, #0, label` jumps if bit 0
 is zero (`tbnz` if it is one).""",
+    x86=dict(
+        solution="""# bool is_even(long long n)  (returned as 0/1 in rax)
+# On entry: rdi = n       On exit: rax = 1 if n is even, else 0
+.text                          # code section
+.globl _is_even                # export the symbol
+.p2align 4                     # 16-byte alignment
+_is_even:                      # function entry
+    testq $1, %rdi             # flags from n & 1; ZF = 1 when the low bit is 0
+    sete %al                   # al (low byte of rax) = ZF ? 1 : 0
+    movzbq %al, %rax           # zero-extend the byte to all 64 bits of rax
+    ret                        # return the boolean
+""",
+        todos=[("sete %al", "set the low byte of rax to 1 if the tested bit was zero (ZF set), otherwise 0")],
+        notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = 1` if `n` is even, else `0`.
+
+`setCC` writes **one byte**: 1 if the condition holds, else 0. Its operand must be an
+8-bit register such as `%al` (low byte of `%rax`), `%cl`, `%dl`, `%r8b`. The upper bytes
+are left untouched, so widen it afterwards with `movzbq` (zero-extend byte to quad).
+`test` is `and` that only sets flags.""",
+        hints=[
+            "After `test`, ZF is 1 exactly when the low bit of `n` was 0, which is when `n` is even.",
+            "Use `setCC` with the 'equal / zero' condition on the low byte of `%rax`.",
+            "`sete %al`",
+        ],
+        explanation="""## Intuition
+
+`n` is even iff bit 0 is 0. `test` computes `n & 1` for the flags only, and `sete`
+turns "ZF is set" into the byte 1.
+
+## Approach
+
+| step | instruction | rax | ZF |
+|---|---|---|---|
+| entry (n = 6) | | garbage | |
+| 1 | `testq $1, %rdi` | garbage | 1 (6 & 1 = 0) |
+| 2 | `sete %al` | garbage, low byte 1 | |
+| 3 | `movzbq %al, %rax` | **1** | |
+
+## Complexity
+
+O(1).
+
+## Common mistakes
+
+* **Skipping the zero-extension.** `sete %al` leaves the other 56 bits of `%rax` as
+  garbage; the harness reads all 64.
+* **`sete %rax`**: `setCC` only takes 8-bit registers (`invalid operand for instruction`).
+* **Clearing `%rax` with `xor` *between* `test` and `sete`**: `xor` rewrites the flags.
+  (Clearing it *before* the `test` is the classic idiom.)""",
+    ),
 ), [("cset x0, eq", "set x0 to 1 if the tested bit was zero (Z flag set), otherwise 0")])
 
 # ---------------------------------------------------------------- 7. sum 1..n
@@ -803,6 +1225,61 @@ O(n) time, O(1) space: registers only, no memory at all.
 Rewrite it with `subs x0, x0, #1` + `b.ne Lloop` at the bottom (one fewer branch per
 iteration, once you guard `n = 0` at the top). Then compare with the closed form:
 `madd`/`mul` + `lsr #1`, which is O(1).""",
+    x86=dict(
+        solution="""# long long sum_to_n(long long n)
+# On entry: rdi = n       On exit: rax = 1 + 2 + ... + n
+.text                          # code section
+.globl _sum_to_n               # export the symbol
+.p2align 4                     # 16-byte alignment
+_sum_to_n:                     # function entry
+    movq $0, %rax              # rax = total = 0 (accumulate directly in the return register)
+Lloop:                         # top of the loop (L-prefixed labels stay private)
+    testq %rdi, %rdi           # flags from n & n: ZF = 1 when n == 0
+    jz Ldone                   # if n == 0, leave the loop
+    addq %rdi, %rax            # total += n
+    decq %rdi                  # n -= 1
+    jmp Lloop                  # unconditional jump back to the test
+Ldone:                         # loop exit
+    ret                        # return total (already in rax)
+""",
+        todos=[("jz Ldone", "leave the loop when the test found n == 0"),
+               ("addq %rdi, %rax", "add the current n into the running total")],
+        notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = 1 + 2 + … + n`.
+
+There is no compare-and-branch-on-zero: test a register against itself
+(`testq %r8, %r8` sets ZF when r8 is 0), then use a conditional jump (`jz`/`je`,
+`jnz`/`jne`, …). `jmp` is the unconditional jump. Keeping the total in `%rax` from the
+start saves a final move.""",
+        hints=[
+            "The `testq` sets ZF exactly when `n` is zero; the next line must act on that.",
+            "`jz label` jumps if ZF is set. Then fold `n` into the total held in `%rax`.",
+            "`jz Ldone` and `addq %rdi, %rax`",
+        ],
+        explanation="""## Intuition
+
+Count `n` down to 0 and add each value to a running total that already lives in the
+return register.
+
+## Approach
+
+| iteration | rdi (n) | rax (total) |
+|---|---|---|
+| entry | 3 | 0 |
+| 1 | 3 → 2 | 3 |
+| 2 | 2 → 1 | 5 |
+| 3 | 1 → 0 | 6 |
+| test: n == 0 → `ret` | 0 | **6** |
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **Testing after decrementing** off by one: the loop must test before adding.
+* **`jnz Ldone`**: exits immediately for any positive `n`.
+* **Accumulating in `%rdi`** and forgetting that the caller reads `%rax`.""",
+    ),
 ), [("add x1, x1, x0", "add the current n (x0) into the running total (x1)"),
     ("mov x0, x1", "move the total into the return register")])
 
@@ -894,6 +1371,60 @@ O(n) time, O(1) space.
 Overflow detection: `mul` silently keeps the low 64 bits. `smulh x2, x1, x0` gives the
 high 64 bits of the signed 128-bit product; if it is not the sign-extension of the low
 half, the multiplication overflowed. Make `factorial` return −1 for `n ≥ 21`.""",
+    x86=dict(
+        solution="""# long long factorial(long long n)
+# On entry: rdi = n       On exit: rax = n!
+.text                          # code section
+.globl _factorial              # export the symbol
+.p2align 4                     # 16-byte alignment
+_factorial:                    # function entry
+    movq $1, %rax              # rax = result = 1
+Lloop:                         # loop test
+    cmpq $1, %rdi              # flags from n - 1
+    jle Ldone                  # signed n <= 1: nothing left to multiply
+    imulq %rdi, %rax           # result *= n
+    decq %rdi                  # n -= 1
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return result (already in rax)
+""",
+        todos=[("movq $1, %rax", "initialise the accumulator rax to the multiplicative identity"),
+               ("imulq %rdi, %rax", "multiply the accumulator rax by the current n")],
+        notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = n!`.
+
+Use the two-operand signed multiply `imulq src, dst` (`dst *= src`); it keeps the low
+64 bits and leaves `%rdx` alone. Accumulate straight in `%rax`.""",
+        hints=[
+            "A product must start at 1, not 0. Where should the product live so you can return it directly?",
+            "`imulq` with two operands multiplies the destination by the source.",
+            "`movq $1, %rax` and `imulq %rdi, %rax`",
+        ],
+        explanation="""## Intuition
+
+`n! = n · (n−1) · … · 2`. Multiply into `%rax` while counting `n` down to 1.
+
+## Approach
+
+| iteration | rdi | rax |
+|---|---|---|
+| entry | 4 | 1 |
+| 1 | 4 → 3 | 4 |
+| 2 | 3 → 2 | 12 |
+| 3 | 2 → 1 | 24 |
+| `cmpq $1` → `jle` | 1 | **24** |
+
+The `jle` (signed) also handles `n = 0`: 0 ≤ 1, so the result stays 1.
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **Starting the product at 0** (everything multiplies to 0).
+* **`jbe` instead of `jle`**: fine for these tests, but the signed condition matches the C type.
+* **One-operand `mulq %rdi`**: multiplies `%rax` but also clobbers `%rdx`.""",
+    ),
 ), [("mov x1, #1", "initialise the accumulator x1 to the multiplicative identity"),
     ("mul x1, x1, x0", "multiply the accumulator x1 by the current n (x0)")])
 
@@ -990,6 +1521,65 @@ O(n) time, O(1) extra space.
 Load two elements per iteration with `ldp x3, x4, [x0], #16` (handle an odd leftover),
 or use indexed addressing `ldr x3, [x0, x4, lsl #3]` with an index register `x4`. Which
 generates fewer instructions per element?""",
+    x86=dict(
+        solution="""# long long sum_array(long long* nums, long long count)
+# On entry: rdi = &nums[0], rsi = count       On exit: rax = sum
+.text                          # code section
+.globl _sum_array              # export the symbol
+.p2align 4                     # 16-byte alignment
+_sum_array:                    # function entry
+    movq $0, %rax              # rax = total = 0
+Lloop:                         # loop test
+    testq %rsi, %rsi           # any elements left?
+    jz Ldone                   # no: finish
+    addq (%rdi), %rax          # total += *ptr (x86 arithmetic can read memory directly)
+    addq $8, %rdi              # ptr += 8: the next element
+    decq %rsi                  # one fewer element to go
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return the total
+""",
+        todos=[("addq (%rdi), %rax", "add the 8-byte element the pointer points at into the total"),
+               ("addq $8, %rdi", "advance the pointer to the next 8-byte element")],
+        notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`. **On exit:** `%rax = sum`.
+
+A memory operand is written `disp(base, index, scale)`: `(%r8)` is the 8 bytes at
+address `r8`, `16(%r8)` is at `r8 + 16`. Unlike ARM, most x86 instructions can take
+**one** memory operand directly, so no separate load is needed: `subq (%r9), %r10`
+subtracts the value stored at `r9` from `r10`. There is no post-increment addressing;
+advance the pointer yourself.""",
+        hints=[
+            "You do not need a separate load: an `add` can read its source straight from memory.",
+            "Parentheses around a register mean 'the value at this address'. Elements are 8 bytes apart.",
+            "`addq (%rdi), %rax` then `addq $8, %rdi`",
+        ],
+        explanation="""## Intuition
+
+Walk a pointer through the array, adding each 8-byte element to the total, until the
+count reaches zero.
+
+## Approach
+
+| iteration | rdi | rsi | rax |
+|---|---|---|---|
+| entry `[5, 1, 4]` | &nums[0] | 3 | 0 |
+| 1 | &nums[1] | 2 | 5 |
+| 2 | &nums[2] | 1 | 6 |
+| 3 | one past the end | 0 | **10** |
+
+`addq (%rdi), %rax` is a load and an add in one instruction.
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **`addq %rdi, %rax`** (no parentheses) adds the *address*, not the element.
+* **`incq %rdi`** advances by 1 byte, not 8: misaligned garbage reads.
+* **Memory-to-memory**: `addq (%rdi), (%rax)` is not encodable; at most one operand
+  may be in memory.""",
+    ),
 ), [("ldr x3, [x0], #8", "load the current element into x3 and advance the pointer x0 to the next 8-byte element"),
     ("add x2, x2, x3", "add the loaded element into the running total x2")])
 
@@ -1083,6 +1673,58 @@ O(n) time, O(1) space.
 Pointer version: keep the start in `x0`, walk `x1` with `ldrb w2, [x1], #1`, and return
 `x1 - x0 - 1`. Real `strlen` implementations compare 16 bytes at a time with NEON
 (`cmeq` + `umaxv`), which is why they are so fast.""",
+    x86=dict(
+        solution="""# long long string_length(const char* s)
+# On entry: rdi = s       On exit: rax = number of bytes before the NUL
+.text                          # code section
+.globl _string_length          # export the symbol
+.p2align 4                     # 16-byte alignment
+_string_length:                # function entry
+    movq $0, %rax              # rax = length so far = index of the byte to check
+Lloop:                         # loop test
+    movzbq (%rdi,%rax), %rcx   # rcx = byte at s + length, zero-extended to 64 bits
+    testq %rcx, %rcx           # is it the NUL terminator?
+    jz Ldone                   # yes: stop
+    incq %rax                  # count this character
+    jmp Lloop                  # check the next byte
+Ldone:                         # loop exit
+    ret                        # return the length
+""",
+        todos=[("movzbq (%rdi,%rax), %rcx", "load the single byte at address s + length into rcx, zero-extended"),
+               ("incq %rax", "increment the length counter")],
+        notes="""**On entry:** `%rdi = s`. **On exit:** `%rax = length`.
+
+Characters are bytes. `movzbq` loads **one byte** and zero-extends it to 64 bits (`movq`
+would load 8 bytes). The address form `(base,index)` means `base + index`:
+`movzbq (%r8,%r9), %r10` loads the byte at `r8 + r9` into `r10`.""",
+        hints=[
+            "Use `%rax` as both the counter and the index: the byte to check lives at `s + rax`.",
+            "Load with zero-extension from a byte (`movzb…`) and the base+index address form.",
+            "`movzbq (%rdi,%rax), %rcx` and `incq %rax`",
+        ],
+        explanation="""## Intuition
+
+Count bytes until the 0 byte. The count doubles as the index of the next byte.
+
+## Approach
+
+| iteration | rax | byte at s+rax |
+|---|---|---|
+| "hi" | 0 | 'h' |
+| | 1 | 'i' |
+| | 2 | 0 → exit, return **2** |
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **`movq (%rdi,%rax), %rcx`** loads 8 bytes: it only finds a zero when eight bytes in
+  a row are zero, and may read past the string.
+* **`movb` into `%cl` then testing `%rcx`**: the upper bytes of `%rcx` are stale garbage.
+  Zero-extend, or test only `%cl`.""",
+    ),
 ), [("ldrb w2, [x0, x1]", "load the single byte at address s + length into w2"),
     ("add x1, x1, #1", "increment the length counter")])
 
@@ -1176,6 +1818,63 @@ O(n) time, O(1) space, and no data-dependent branches in the body.
 With `ccmp` (conditional compare) you can count elements in a range `lo ≤ x ≤ hi` with
 one `cmp`, one `ccmp` and one `cinc`: `cmp x4, x5; ccmp x4, x6, #2, ge; cinc x3, x3, ls`.
 Work out why the `#nzcv` value `#2` makes the range test fail when the first test fails.""",
+    x86=dict(
+        solution="""# long long count_value(long long* nums, long long count, long long target)
+# On entry: rdi = &nums[0], rsi = count, rdx = target       On exit: rax = occurrences
+.text                          # code section
+.globl _count_value            # export the symbol
+.p2align 4                     # 16-byte alignment
+_count_value:                  # function entry
+    movq $0, %rax              # rax = matches found
+Lloop:                         # loop test
+    testq %rsi, %rsi           # elements left?
+    jz Ldone                   # no
+    movq (%rdi), %rcx          # rcx = current element
+    addq $8, %rdi              # advance the pointer
+    cmpq %rdx, %rcx            # flags from element - target
+    sete %cl                   # cl = 1 if equal, else 0 (the element is no longer needed)
+    movzbq %cl, %rcx           # zero-extend: rcx = 0 or 1
+    addq %rcx, %rax            # matches += 0 or 1
+    decq %rsi                  # one fewer element
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return the count
+""",
+        todos=[("cmpq %rdx, %rcx", "compare the loaded element (rcx) with target (rdx)"),
+               ("sete %cl", "set the low byte of rcx to 1 if they were equal, otherwise 0")],
+        notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`, `%rdx = target`.
+**On exit:** `%rax = occurrences`.
+
+x86 has no conditional increment; a branch-free equivalent is `setCC` (byte 0/1) +
+`movzbq` + `add`. `setCC` needs an 8-bit register name: `%cl` is the low byte of `%rcx`,
+`%r8b` the low byte of `%r8`.""",
+        hints=[
+            "First set the flags by comparing the element with `target`.",
+            "Turn 'equal' into the byte 1 with a `setCC` on the low byte of `%rcx`; the next two lines add it.",
+            "`cmpq %rdx, %rcx` then `sete %cl`",
+        ],
+        explanation="""## Intuition
+
+For each element add 1 if it equals the target, else 0, without a branch.
+
+## Approach
+
+| element | target | `sete %cl` | rax |
+|---|---|---|---|
+| 2 | 2 | 1 | 1 |
+| 7 | 2 | 0 | 1 |
+| 2 | 2 | 1 | **2** |
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **`sete %rcx`**: only 8-bit registers are allowed.
+* **Adding without `movzbq`**: the upper bytes of `%rcx` still hold the element.
+* **Putting `addq $8, %rdi` between `cmpq` and `sete`**: `add` overwrites the flags.""",
+    ),
 ), [("cmp x4, x2", "compare the loaded element (x4) with target (x2)"),
     ("cinc x3, x3, eq", "increment the counter x3 only if the comparison found them equal")])
 
@@ -1267,6 +1966,63 @@ O(n) time, O(1) space.
 Return the *index* of the maximum instead: keep an index register and update it with a
 second `csel` using the same flags (flags survive until the next flag-setting
 instruction, so one `cmp` can drive several `csel`s).""",
+    x86=dict(
+        solution="""# long long max_array(long long* nums, long long count)   (count >= 1)
+# On entry: rdi = &nums[0], rsi = count       On exit: rax = max element
+.text                          # code section
+.globl _max_array              # export the symbol
+.p2align 4                     # 16-byte alignment
+_max_array:                    # function entry
+    movq (%rdi), %rax          # rax = best = nums[0]
+    addq $8, %rdi              # rdi now points at nums[1]
+    decq %rsi                  # rsi = elements still to examine
+Lloop:                         # loop test
+    testq %rsi, %rsi           # any left?
+    jz Ldone                   # none left
+    movq (%rdi), %rcx          # rcx = next element
+    addq $8, %rdi              # advance the pointer
+    cmpq %rax, %rcx            # flags from element - best
+    cmovgq %rcx, %rax          # best = (element > best, signed) ? element : best
+    decq %rsi                  # one fewer element
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return best
+""",
+        todos=[("movq (%rdi), %rax", "seed the best value rax with nums[0]"),
+               ("cmpq %rax, %rcx", "compare the new element rcx with the current best rax"),
+               ("cmovgq %rcx, %rax", "keep the new element if it is greater (signed), otherwise keep the best")],
+        notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count` (≥ 1). **On exit:** `%rax = max`.
+
+Remember the AT&T compare order: `cmpq %r8, %r9` sets flags from `r9 - r8`, so a
+following `g` condition means r9 > r8. `cmovgq` is the signed "greater" conditional move.""",
+        hints=[
+            "Start `best` from the first element (in the return register), not from 0: the array may be all negative.",
+            "Compare element against best so that `g` means 'element > best', then conditionally move.",
+            "`movq (%rdi), %rax`, `cmpq %rax, %rcx`, `cmovgq %rcx, %rax`",
+        ],
+        explanation="""## Intuition
+
+Keep the best value so far in `%rax`; replace it whenever a larger element appears.
+
+## Approach
+
+| element | flags (element − best) | rax |
+|---|---|---|
+| seed −3 | | −3 |
+| −7 | less | −3 |
+| 4 | greater | 4 |
+| 1 | less | **4** |
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **Starting from 0** gives 0 for all-negative arrays.
+* **`cmpq %rcx, %rax`** reverses the meaning of `g`: you would compute the minimum.
+* **`cmovaq`** (unsigned "above"): negative numbers look huge.""",
+    ),
 ), [("ldr x2, [x0], #8", "seed the best value x2 with nums[0] and advance x0 to the next element"),
     ("cmp x3, x2", "compare the new element x3 with the current best x2"),
     ("csel x2, x3, x2, gt", "keep the new element if it is greater (signed), otherwise keep the best")])
@@ -1364,6 +2120,64 @@ register and use `cnt` + `addv`:
     addv b0, v0.8b       // sum the 8 bytes
     fmov w0, s0          // back to a general register
 ```""",
+    x86=dict(
+        solution="""# long long popcount(long long n)   (n >= 0)
+# On entry: rdi = n       On exit: rax = number of 1 bits
+.text                          # code section
+.globl _popcount               # export the symbol
+.p2align 4                     # 16-byte alignment
+_popcount:                     # function entry
+    movq $0, %rax              # rax = bit count
+Lloop:                         # loop test
+    testq %rdi, %rdi           # any 1 bits remaining?
+    jz Ldone                   # no
+    movq %rdi, %rcx            # rcx = n
+    andq $1, %rcx              # rcx = lowest bit of n (0 or 1)
+    addq %rcx, %rax            # count += that bit
+    shrq $1, %rdi              # n >>= 1 (logical shift right, zero fill)
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return the count
+""",
+        todos=[("andq $1, %rcx", "isolate the lowest bit of the copy in rcx"),
+               ("addq %rcx, %rax", "add that bit (0 or 1) to the count")],
+        notes="""**On entry:** `%rdi = n` (≥ 0). **On exit:** `%rax` = number of 1 bits.
+
+Bitwise ops are two-operand too: `andq $0xff, %r8` keeps only the low byte of r8.
+Shifts: `shlq` (left), `shrq` (logical right, zero fill), `sarq` (arithmetic right, sign
+fill). Because `and` is destructive, copy `n` first.""",
+        hints=[
+            "`%rcx` holds a copy of `n`. Mask it so only bit 0 survives.",
+            "AND with the immediate 1, then add the result to the count in `%rax`.",
+            "`andq $1, %rcx` and `addq %rcx, %rax`",
+        ],
+        explanation="""## Intuition
+
+Peel off the lowest bit, add it to the count, shift right, repeat until nothing is left.
+
+## Approach
+
+| rdi (binary) | low bit | rax |
+|---|---|---|
+| 1011 | 1 | 1 |
+| 101 | 1 | 2 |
+| 10 | 0 | 2 |
+| 1 | 1 | 3 |
+| 0 → exit | | **3** |
+
+## Complexity
+
+O(number of bits) ≤ 64 iterations.
+
+## Common mistakes
+
+* **`andq $1, %rdi`** destroys `n`.
+* **`sarq`** on negative input would loop forever (sign fill); `shrq` always terminates.
+
+## Going further
+
+CPUs with POPCNT do this in one instruction: `popcntq %rdi, %rax`.""",
+    ),
 ), [("and x2, x0, #1", "isolate the lowest bit of n into x2"),
     ("add x1, x1, x2", "add that bit (0 or 1) to the count x1")])
 
@@ -1459,6 +2273,64 @@ O(log min(a, b)) iterations: the remainder at least halves every two steps.
 Binary GCD (Stein's algorithm) avoids division completely using `ctz` (count trailing
 zeros, via `rbit` + `clz`), shifts and subtraction. It can be faster on cores where
 `udiv` takes many cycles.""",
+    x86=dict(
+        solution="""# long long gcd(long long a, long long b)   (a, b >= 0)
+# On entry: rdi = a, rsi = b       On exit: rax = gcd(a, b)
+.text                          # code section
+.globl _gcd                    # export the symbol
+.p2align 4                     # 16-byte alignment
+_gcd:                          # function entry
+    movq %rdi, %rax            # rax = a
+Lloop:                         # loop test
+    testq %rsi, %rsi           # b == 0?
+    jz Ldone                   # yes: the answer is a, already in rax
+    xorl %edx, %edx            # rdx = 0: high half of the 128-bit dividend rdx:rax
+    divq %rsi                  # rax = rdx:rax / b, rdx = rdx:rax mod b (unsigned)
+    movq %rsi, %rax            # a = b
+    movq %rdx, %rsi            # b = a mod b
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return a
+""",
+        todos=[("xorl %edx, %edx", "clear the high half of the 128-bit dividend"),
+               ("divq %rsi", "divide a by b (unsigned): quotient into rax, remainder into rdx")],
+        notes="""**On entry:** `%rdi = a`, `%rsi = b`. **On exit:** `%rax = gcd(a, b)`.
+
+x86 division is unusual: `divq src` divides the **128-bit** value `%rdx:%rax` by `src`,
+leaving the quotient in `%rax` and the **remainder in `%rdx`** (so no multiply-subtract
+is needed). Before an unsigned `divq`, `%rdx` must be 0; before a signed `idivq`,
+sign-extend `%rax` into `%rdx` with `cqto`. Writing a 32-bit register (`%edx`) zeroes
+the upper half of the 64-bit one.""",
+        hints=[
+            "The dividend is `%rdx:%rax`. `a` is already in `%rax`; what must `%rdx` be for an unsigned divide?",
+            "Zero `%rdx` (xor a register with itself is the idiom), then use the one-operand unsigned divide by `b`.",
+            "`xorl %edx, %edx` then `divq %rsi`",
+        ],
+        explanation="""## Intuition
+
+Euclid: gcd(a, b) = gcd(b, a mod b), and gcd(a, 0) = a. x86's `div` hands you the
+remainder directly.
+
+## Approach
+
+| rax (a) | rsi (b) | rdx after `divq` |
+|---|---|---|
+| 48 | 18 | 12 |
+| 18 | 12 | 6 |
+| 12 | 6 | 0 |
+| 6 | 0 → exit | **6** |
+
+## Complexity
+
+O(log min(a, b)) iterations.
+
+## Common mistakes
+
+* **Forgetting to clear `%rdx`**: the dividend becomes `garbage·2⁶⁴ + a`; if the
+  quotient does not fit in 64 bits the CPU raises a divide error (`SIGFPE`).
+* **Dividing by zero**: also `SIGFPE`; the loop tests `b` first.
+* **`cqto` + `idivq`** works too for non-negative inputs, but `div` matches the unsigned spec.""",
+    ),
 ), [("udiv x2, x0, x1", "compute the quotient a / b (unsigned) into x2"),
     ("msub x2, x2, x1, x0", "turn the quotient into the remainder: x2 = a - q * b")])
 
@@ -1555,6 +2427,64 @@ O(n) time, O(1) space.
 Two-register trick with no temporary: `add x2, x2, x1` then `sub x1, x2, x1` (new b =
 a + b, new a = new b − a). Or compute `F(n)` in O(log n) with the fast-doubling
 identities `F(2k) = F(k)(2F(k+1) − F(k))`, `F(2k+1) = F(k)² + F(k+1)²`.""",
+    x86=dict(
+        solution="""# long long fibonacci(long long n)
+# On entry: rdi = n       On exit: rax = F(n)
+.text                          # code section
+.globl _fibonacci              # export the symbol
+.p2align 4                     # 16-byte alignment
+_fibonacci:                    # function entry
+    movq $0, %rax              # rax = a = F(0)
+    movq $1, %rcx              # rcx = b = F(1)
+Lloop:                         # loop test
+    testq %rdi, %rdi           # n steps done?
+    jz Ldone                   # yes
+    leaq (%rax,%rcx), %rdx     # t = a + b (lea computes an address expression, no memory access)
+    movq %rcx, %rax            # a = b
+    movq %rdx, %rcx            # b = t
+    decq %rdi                  # n -= 1
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return a = F(n)
+""",
+        todos=[("leaq (%rax,%rcx), %rdx", "compute the next Fibonacci number a + b into the temporary rdx in one instruction"),
+               ("movq %rcx, %rax", "slide the window: a becomes b"),
+               ("movq %rdx, %rcx", "slide the window: b becomes the new value")],
+        notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = F(n)`.
+
+Here `a` lives in `%rax`, `b` in `%rcx`, and the temporary in `%rdx`. `lea` ("load
+effective address") evaluates a memory-operand expression **without** reading memory,
+which makes it a handy three-operand add: `leaq (%r8,%r9), %r10` sets `r10 = r8 + r9`
+(and `leaq 5(%r8), %r10` sets `r10 = r8 + 5`).""",
+        hints=[
+            "You need `a + b` in a third register without destroying `a` or `b`.",
+            "`lea` with a base+index expression adds two registers into a third. Then shift the window in the right order.",
+            "`leaq (%rax,%rcx), %rdx`, `movq %rcx, %rax`, `movq %rdx, %rcx`",
+        ],
+        explanation="""## Intuition
+
+Keep a sliding window `(a, b) = (F(i), F(i+1))` and advance it `n` times.
+
+## Approach
+
+| iteration | rax (a) | rcx (b) | rdx (t) |
+|---|---|---|---|
+| entry n = 4 | 0 | 1 | |
+| 1 | 1 | 1 | 1 |
+| 2 | 1 | 2 | 2 |
+| 3 | 2 | 3 | 3 |
+| 4 | **3** | 5 | 5 |
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **Updating `b` before `a`**: the old `b` is lost and the sequence doubles.
+* **`movq (%rax,%rcx), %rdx`** *reads memory* at that address: a segfault. Only `lea`
+  computes the address without loading.""",
+    ),
 ), [("add x3, x1, x2", "compute the next Fibonacci number a + b into the temporary x3"),
     ("mov x1, x2", "slide the window: a becomes b"),
     ("mov x2, x3", "slide the window: b becomes the new value")])
@@ -1673,6 +2603,75 @@ Replace the compare chain with a bitmask: `sub w3, w2, #'a'`, then `cmp w3, #25`
 `b.hi` (one unsigned compare rejects both "below 'a'" and "above 'z'"!), then test bit
 `w3` of the mask `0x104111` (bits 0, 4, 8, 14, 20). You will need `movz`/`movk` to build
 that constant, since it is not a valid logical immediate.""",
+    x86=dict(
+        solution="""# long long count_vowels(const char* s)
+# On entry: rdi = s       On exit: rax = number of vowels (either case)
+.text                          # code section
+.globl _count_vowels           # export the symbol
+.p2align 4                     # 16-byte alignment
+_count_vowels:                 # function entry
+    movq $0, %rax              # rax = vowel count
+Lloop:                         # next character
+    movzbq (%rdi), %rcx        # rcx = *s, zero-extended
+    incq %rdi                  # s += 1
+    testq %rcx, %rcx           # NUL terminator?
+    jz Ldone                   # yes: finished
+    orq $0x20, %rcx            # set bit 5: folds 'A'..'Z' onto 'a'..'z'
+    cmpq $'a', %rcx            # is it 'a'?
+    je Lvowel                  # yes: count it
+    cmpq $'e', %rcx            # is it 'e'?
+    je Lvowel                  # yes
+    cmpq $'i', %rcx            # is it 'i'?
+    je Lvowel                  # yes
+    cmpq $'o', %rcx            # is it 'o'?
+    je Lvowel                  # yes
+    cmpq $'u', %rcx            # is it 'u'?
+    je Lvowel                  # yes
+    jmp Lloop                  # not a vowel: next character
+Lvowel:                        # the byte was a vowel
+    incq %rax                  # count += 1
+    jmp Lloop                  # next character
+Ldone:                         # end of string
+    ret                        # return the count
+""",
+        todos=[("movzbq (%rdi), %rcx", "load the current byte of the string into rcx, zero-extended"),
+               ("orq $0x20, %rcx", "lowercase the character by setting bit 5 (0x20)")],
+        notes="""**On entry:** `%rdi = s`. **On exit:** `%rax` = number of vowels.
+
+Load bytes with `movzbq` (one byte, zero-extended). Character constants work as
+immediates: `cmpq $'z', %r8`. ASCII upper- and lowercase letters differ only in bit 5
+(0x20), so OR-ing it in lowercases a letter.""",
+        hints=[
+            "Load exactly one byte from where `%rdi` points; the next line advances the pointer.",
+            "Setting bit 5 with an OR folds uppercase onto lowercase (`$0x20`).",
+            "`movzbq (%rdi), %rcx` and `orq $0x20, %rcx`",
+        ],
+        explanation="""## Intuition
+
+Walk the string byte by byte, fold case, and compare against the five vowels.
+
+## Approach
+
+| byte | after `orq $0x20` | vowel? | rax |
+|---|---|---|---|
+| 'H' | 'h' | no | 0 |
+| 'E' | 'e' | yes | 1 |
+| 'y' | 'y' | no | 1 |
+| 0 → exit | | | **1** |
+
+The pointer is incremented before the NUL test; that is fine because we return
+without using it.
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **`movq (%rdi), %rcx`** loads 8 characters at once.
+* **`andq $0x20`** clears everything *except* bit 5.
+* **Comparing before folding case** misses uppercase vowels.""",
+    ),
 ), [("ldrb w2, [x0], #1", "load the next byte of the string into w2 and advance x0 by one byte"),
     ("orr w2, w2, #0x20", "lowercase the character by setting bit 5 (0x20)")])
 
@@ -1774,6 +2773,67 @@ O(n) time, O(1) extra space.
 `ldr x3, [x0]` + `ldr x4, [x2]` can't become a single `ldp` because the two elements
 aren't adjacent, but reversing the *bytes* of a 64-bit register is one instruction:
 `rev x0, x0`. Look up `rev`, `rev16`, `rev32` and `rbit`.""",
+    x86=dict(
+        solution="""# void reverse_array(long long* nums, long long count)
+# On entry: rdi = &nums[0], rsi = count       On exit: nums reversed in memory
+.text                          # code section
+.globl _reverse_array          # export the symbol
+.p2align 4                     # 16-byte alignment
+_reverse_array:                # function entry
+    leaq -8(%rdi,%rsi,8), %rdx # rdx = nums + count*8 - 8 = &nums[count-1] (right pointer)
+Lloop:                         # loop test
+    cmpq %rdx, %rdi            # flags from left - right
+    jae Ldone                  # unsigned left >= right: pointers met or crossed
+    movq (%rdi), %rcx          # rcx = *left
+    movq (%rdx), %r8           # r8 = *right
+    movq %r8, (%rdi)           # *left = old right value
+    movq %rcx, (%rdx)          # *right = old left value
+    addq $8, %rdi              # left += 8
+    subq $8, %rdx              # right -= 8
+    jmp Lloop                  # repeat
+Ldone:                         # done
+    ret                        # void function: nothing to return
+""",
+        todos=[("leaq -8(%rdi,%rsi,8), %rdx", "compute the address of the last element, nums + count*8 - 8, into rdx with one instruction"),
+               ("movq %r8, (%rdi)", "store the old right value (r8) at the left pointer"),
+               ("movq %rcx, (%rdx)", "store the old left value (rcx) at the right pointer")],
+        notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`. **On exit:** the array is reversed in place.
+
+The full memory-operand form is `disp(base, index, scale)` = `base + index*scale + disp`,
+with scale 1, 2, 4 or 8. `lea` evaluates it without touching memory:
+`leaq 16(%r9,%r10,4), %r11` sets `r11 = r9 + r10*4 + 16`. Compare pointers with the
+**unsigned** conditions (`b`, `be`, `a`, `ae`).""",
+        hints=[
+            "The last element sits at `nums + (count-1)*8`, which is `nums + count*8 - 8`.",
+            "One `lea` with base `%rdi`, index `%rsi`, scale 8 and displacement −8 computes it. The swap stores each loaded value at the *other* pointer.",
+            "`leaq -8(%rdi,%rsi,8), %rdx`, `movq %r8, (%rdi)`, `movq %rcx, (%rdx)`",
+        ],
+        explanation="""## Intuition
+
+Two pointers start at the ends, swap, and move toward each other until they meet.
+
+## Approach
+
+| step | left | right | array |
+|---|---|---|---|
+| entry | &a[0] | &a[3] | 1 2 3 4 |
+| swap | &a[1] | &a[2] | 4 2 3 1 |
+| swap | &a[2] | &a[1] | 4 3 2 1 |
+| left ≥ right → `ret` | | | **4 3 2 1** |
+
+For `count = 0` the right pointer is `nums − 8`, already below `left`, so nothing is
+touched.
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **Signed `jge`** on addresses: works here but is wrong in principle for pointers.
+* **Storing a register back where it came from**: the array is unchanged.
+* **Scale 1 instead of 8**: `(%rdi,%rsi)` points into the middle of the array.""",
+    ),
 ), [("add x2, x0, x1, lsl #3", "compute nums + count*8 (one past the last element) into x2 using a shifted register operand"),
     ("str x4, [x0], #8", "store the old right value (x4) at the left pointer, then advance the left pointer by 8"),
     ("str x3, [x2], #-8", "store the old left value (x3) at the right pointer, then move the right pointer back by 8")])
@@ -1874,6 +2934,63 @@ Unroll by two with `ldp x5, x7, [x0], #16` / `ldp x6, x8, [x2], #16` and two
 accumulators (two independent `madd` chains keep the multiplier pipeline busy), then
 handle a leftover element. With NEON you could process several 32-bit lanes per
 instruction (`mla v0.4s, v1.4s, v2.4s`).""",
+    x86=dict(
+        solution="""# long long dot_product(long long* a, long long aSize, long long* b, long long bSize)
+# On entry: rdi = &a[0], rsi = len(a), rdx = &b[0], rcx = len(b)       On exit: rax = sum a[i]*b[i]
+.text                          # code section
+.globl _dot_product            # export the symbol
+.p2align 4                     # 16-byte alignment
+_dot_product:                  # function entry
+    movq $0, %rax              # rax = running total
+Lloop:                         # loop test
+    testq %rsi, %rsi           # pairs left? (rcx is equal and unused)
+    jz Ldone                   # no
+    movq (%rdi), %r8           # r8 = a[i]
+    imulq (%rdx), %r8          # r8 = a[i] * b[i] (multiply by a memory operand)
+    addq %r8, %rax             # total += a[i] * b[i]
+    addq $8, %rdi              # advance a
+    addq $8, %rdx              # advance b
+    decq %rsi                  # one fewer pair
+    jmp Lloop                  # repeat
+Ldone:                         # loop exit
+    ret                        # return the total
+""",
+        todos=[("imulq (%rdx), %r8", "multiply a[i] (r8) by b[i], read directly from b's pointer"),
+               ("addq %r8, %rax", "add the product to the running total"),
+               ("addq $8, %rdx", "advance b's pointer to its next element")],
+        notes="""**On entry:** `%rdi = &a[0]`, `%rsi = len(a)`, `%rdx = &b[0]`, `%rcx = len(b)`
+(lengths are equal). **On exit:** `%rax = Σ a[i]·b[i]`.
+
+There is no multiply-add; use `imulq` then `addq`. The two-operand `imulq` accepts a
+memory source, e.g. `imulq 8(%r9), %r10` multiplies r10 by the value at `r9 + 8`.
+Avoid the one-operand `mulq`: it writes `%rdx`, which holds `b`'s pointer here.""",
+        hints=[
+            "`%r8` holds `a[i]`; `b[i]` is at the address in `%rdx` and can be used without a separate load.",
+            "Two-operand `imulq` with a memory source, then add into the total, then advance both pointers by 8.",
+            "`imulq (%rdx), %r8`, `addq %r8, %rax`, `addq $8, %rdx`",
+        ],
+        explanation="""## Intuition
+
+Walk both arrays in lockstep, multiplying pairs and summing the products.
+
+## Approach
+
+| i | a[i] | b[i] | r8 | rax |
+|---|---|---|---|---|
+| 0 | 1 | 4 | 4 | 4 |
+| 1 | 2 | 5 | 10 | 14 |
+| 2 | 3 | 6 | 18 | **32** |
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **`mulq (%rdx)`** (one operand) multiplies `%rax` and overwrites `%rdx`: the total
+  and b's pointer are both destroyed.
+* **Advancing only one pointer**: every `a[i]` gets multiplied by `b[0]`.""",
+    ),
 ), [("ldr x6, [x2], #8", "load b[i] from b's pointer (x2) into x6 and advance that pointer"),
     ("madd x4, x5, x6, x4", "multiply a[i] (x5) by b[i] (x6) and add the product to the total x4")])
 
@@ -1992,6 +3109,77 @@ Write the "lower bound" variant (first index with `nums[i] ≥ target`) branch-f
 keep `base` and `len`, and each step do `cmp` + `csel` on `base` and halve `len`. The
 loop then has no unpredictable branches, which is how high-performance searches are
 written.""",
+    x86=dict(
+        solution="""# long long binary_search(long long* nums, long long count, long long target)
+# On entry: rdi = &nums[0], rsi = count, rdx = target       On exit: rax = index or -1
+.text                          # code section
+.globl _binary_search          # export the symbol
+.p2align 4                     # 16-byte alignment
+_binary_search:                # function entry
+    movq $0, %r8               # r8 = lo = 0
+    leaq -1(%rsi), %r9         # r9 = hi = count - 1 (may be -1)
+Lloop:                         # loop test
+    cmpq %r9, %r8              # flags from lo - hi
+    jg Lnot_found              # signed lo > hi: range is empty
+    leaq (%r8,%r9), %rax       # rax = lo + hi (both >= 0 inside the loop)
+    shrq $1, %rax              # mid = (lo + hi) / 2
+    movq (%rdi,%rax,8), %rcx   # rcx = nums[mid] (address nums + mid*8)
+    cmpq %rdx, %rcx            # compare nums[mid] with target
+    je Lfound                  # equal: done
+    jl Lgo_right               # nums[mid] < target (signed): search the right half
+    leaq -1(%rax), %r9         # otherwise hi = mid - 1
+    jmp Lloop                  # continue
+Lgo_right:                     # target is to the right of mid
+    leaq 1(%rax), %r8          # lo = mid + 1
+    jmp Lloop                  # continue
+Lfound:                        # nums[mid] == target
+    ret                        # return mid (already in rax)
+Lnot_found:                    # range became empty
+    movq $-1, %rax             # return -1
+    ret                        # back to the caller
+""",
+        todos=[("jg Lnot_found", "leave the loop when lo > hi, using a SIGNED condition (hi can be -1)"),
+               ("movq (%rdi,%rax,8), %rcx", "load nums[mid] into rcx (address = nums + mid * 8)"),
+               ("jl Lgo_right", "if nums[mid] < target (signed), branch to Lgo_right")],
+        notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`, `%rdx = target`.
+**On exit:** `%rax` = index or −1.
+
+Registers: `lo = %r8`, `hi = %r9`, `mid = %rax`. Indexed loads use
+`disp(base,index,scale)`: `movq (%r10,%r11,8), %r12` loads the 8-byte element `r10[r11]`.
+One `cmp` can feed several conditional jumps in a row, since jumps do not change the
+flags. Signed jumps: `jl jle jg jge`; unsigned: `jb jbe ja jae`.""",
+        hints=[
+            "`hi` starts at −1 for an empty array, so the loop test must be signed.",
+            "The element address is base `%rdi`, index `%rax`, scale 8. After comparing `nums[mid]` with the target, the flags still hold for a second jump.",
+            "`jg Lnot_found`, `movq (%rdi,%rax,8), %rcx`, `jl Lgo_right`",
+        ],
+        explanation="""## Intuition
+
+Keep a closed range `[lo, hi]` that must contain the target if it exists; halve it each
+step by looking at the middle element.
+
+## Approach
+
+Search 7 in `[1, 3, 5, 7, 9]`:
+
+| lo (r8) | hi (r9) | mid (rax) | nums[mid] | action |
+|---|---|---|---|---|
+| 0 | 4 | 2 | 5 | less → lo = 3 |
+| 3 | 4 | 3 | 7 | equal → return **3** |
+
+`leaq -1(%rax), %r9` is a compact `r9 = rax - 1`.
+
+## Complexity
+
+O(log n) time, O(1) space.
+
+## Common mistakes
+
+* **`ja`** (unsigned) for `lo > hi`: with `hi = -1` that is 0 > 2⁶⁴−1, false, and the
+  loop reads `nums[huge]`.
+* **Scale 1** in the load reads misaligned bytes.
+* **`jb` instead of `jl`** for the value comparison breaks on negative numbers.""",
+    ),
 ), [("b.gt Lnot_found", "leave the loop when lo > hi, using a SIGNED condition (hi can be -1)"),
     ("ldr x6, [x0, x5, lsl #3]", "load nums[mid] into x6 (address = nums + mid * 8)"),
     ("b.lt Lgo_right", "if nums[mid] < target (signed), branch to Lgo_right")])
@@ -2108,6 +3296,79 @@ O(n) time (one scan plus half a scan), O(1) space.
 Make it case-insensitive and ignore non-letters (the classic LeetCode version): skip
 bytes on each side that are not letters (use the `sub` + unsigned `cmp` range trick on
 `c | 0x20`) and compare the folded values.""",
+    x86=dict(
+        solution="""# bool is_palindrome(const char* s)   (returned as 0/1 in rax)
+# On entry: rdi = s       On exit: rax = 1 if s is a palindrome, else 0
+.text                          # code section
+.globl _is_palindrome          # export the symbol
+.p2align 4                     # 16-byte alignment
+_is_palindrome:                # function entry
+    movq %rdi, %rsi            # rsi = scanning pointer, starts at s
+Lfind_end:                     # phase 1: find the NUL terminator
+    cmpb $0, (%rsi)            # compare the byte at rsi with 0
+    je Lfound_end              # reached the NUL
+    incq %rsi                  # next byte
+    jmp Lfind_end              # keep scanning
+Lfound_end:                    # rsi points at the NUL
+    decq %rsi                  # rsi = last character (s - 1 if the string is empty)
+Lcompare:                      # phase 2: compare from both ends
+    cmpq %rsi, %rdi            # flags from left - right
+    jae Lyes                   # unsigned left >= right: every pair matched
+    movzbq (%rdi), %rax        # rax = *left
+    movzbq (%rsi), %rcx        # rcx = *right
+    incq %rdi                  # left += 1
+    decq %rsi                  # right -= 1
+    cmpq %rcx, %rax            # same character?
+    jne Lno                    # mismatch: not a palindrome
+    jmp Lcompare               # next pair
+Lyes:                          # palindrome
+    movq $1, %rax              # return true
+    ret                        # back to the caller
+Lno:                           # mismatch found
+    movq $0, %rax              # return false
+    ret                        # back to the caller
+""",
+        todos=[("jae Lyes", "if the left pointer is at or past the right pointer (unsigned), every pair matched: branch to Lyes"),
+               ("movzbq (%rsi), %rcx", "load the byte at the right pointer into rcx, zero-extended"),
+               ("cmpq %rcx, %rax", "compare the left byte with the right byte"),
+               ("jne Lno", "if they differ, branch to Lno")],
+        notes="""**On entry:** `%rdi = s`. **On exit:** `%rax = 1` if `s` is a palindrome, else `0`.
+
+Left pointer is `%rdi`, right pointer `%rsi`. A compare can read memory directly with a
+size suffix: `cmpb $0, (%r8)` compares the byte at `r8` with 0. Load characters with
+`movzbq`. Pointer comparisons use unsigned conditions (`jb`, `jae`, …).""",
+        hints=[
+            "Stop comparing once the pointers meet or cross; addresses are unsigned.",
+            "Load the right byte with zero-extension like the left one, compare the two registers, and jump to `Lno` if not equal.",
+            "`jae Lyes`, `movzbq (%rsi), %rcx`, `cmpq %rcx, %rax`, `jne Lno`",
+        ],
+        explanation="""## Intuition
+
+Find the end, then walk two pointers inward comparing bytes; any mismatch means no.
+
+## Approach
+
+`"abba"`:
+
+| left | right | bytes | action |
+|---|---|---|---|
+| s+0 | s+3 | a, a | equal |
+| s+1 | s+2 | b, b | equal |
+| s+2 | s+1 | | left ≥ right → **1** |
+
+The empty string gives right = s − 1 < left, so it returns 1 immediately.
+
+## Complexity
+
+O(n) time, O(1) space.
+
+## Common mistakes
+
+* **`movq` loads**: compare 8 bytes at a time instead of characters.
+* **Signed `jge`** on pointers.
+* **`cmpb $0, %rsi`** (no parentheses) compares the pointer itself, and the size does
+  not match: `invalid operand for instruction`.""",
+    ),
 ), [("b.hs Lyes", "if the left pointer is at or past the right pointer (unsigned), every pair matched: branch to Lyes"),
     ("ldrb w3, [x1], #-1", "load the byte at the right pointer into w3 and move the right pointer back one byte"),
     ("cmp w2, w3", "compare the left byte with the right byte"),
@@ -2239,6 +3500,78 @@ Replace the branch around the swap with a branch-free version: `cmp x5, x6`,
 `csel x8, x5, x6, le` (min), `csel x9, x6, x5, le` (max), `stp x8, x9, [x3]`. It always
 stores, but never mispredicts. Then try insertion sort, which needs a backwards inner
 loop with pre-indexed addressing.""",
+    x86=dict(
+        solution="""# void bubble_sort(long long* nums, long long count)
+# On entry: rdi = &nums[0], rsi = count       On exit: nums sorted ascending in memory
+.text                          # code section
+.globl _bubble_sort            # export the symbol
+.p2align 4                     # 16-byte alignment
+_bubble_sort:                  # function entry
+    cmpq $1, %rsi              # fewer than two elements?
+    jle Ldone                  # then it is already sorted
+    leaq -1(%rsi), %rdx        # rdx = comparisons in the first pass = count - 1
+Louter:                        # start of one pass
+    movq %rdi, %rcx            # rcx = cursor at nums[0]
+    movq %rdx, %r8             # r8 = comparisons to do this pass
+    movq $0, %r9               # r9 = swapped flag = false
+Linner:                        # compare one adjacent pair
+    movq (%rcx), %rax          # rax = cursor[0]
+    movq 8(%rcx), %r10         # r10 = cursor[1] (the next 8 bytes)
+    cmpq %r10, %rax            # flags from cursor[0] - cursor[1]
+    jle Lnoswap                # signed cursor[0] <= cursor[1]: already in order
+    movq %r10, (%rcx)          # cursor[0] = old cursor[1]
+    movq %rax, 8(%rcx)         # cursor[1] = old cursor[0]
+    movq $1, %r9               # remember that this pass swapped something
+Lnoswap:                       # move to the next pair
+    addq $8, %rcx              # cursor += one element
+    decq %r8                   # one fewer comparison; sets ZF when it reaches 0
+    jnz Linner                 # more pairs in this pass
+    testq %r9, %r9             # did this pass swap anything?
+    jz Ldone                   # a pass without swaps: sorted, stop early
+    decq %rdx                  # the last slot is final: shorten the next pass
+    jnz Louter                 # run another pass if any comparisons remain
+Ldone:                         # finished
+    ret                        # void function
+""",
+        todos=[("movq 8(%rcx), %r10", "load the neighbour cursor[1] (8 bytes past the cursor) into r10"),
+               ("jle Lnoswap", "skip the swap if cursor[0] <= cursor[1] (signed)"),
+               ("movq %r10, (%rcx)", "write the old cursor[1] into cursor[0]"),
+               ("movq %rax, 8(%rcx)", "write the old cursor[0] into cursor[1]")],
+        notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`. **On exit:** the array is sorted ascending.
+
+Registers: cursor `%rcx`, comparisons left in this pass `%r8`, swapped flag `%r9`,
+the pair in `%rax` / `%r10`, pass length `%rdx`. x86 has no pair load/store: use two
+`movq`s with a displacement (`8(%r11)` is the element after `(%r11)`). `decq` sets ZF
+when the result is 0, so it can drive a `jnz` directly.""",
+        hints=[
+            "The pair is `cursor[0]` at `(%rcx)` and `cursor[1]` at `8(%rcx)`.",
+            "Jump past the swap with a signed 'less or equal' condition; to swap, store each register at the other slot.",
+            "`movq 8(%rcx), %r10`, `jle Lnoswap`, `movq %r10, (%rcx)`, `movq %rax, 8(%rcx)`",
+        ],
+        explanation="""## Intuition
+
+Each pass bubbles the largest remaining value to the end; stop when a pass makes no
+swaps.
+
+## Approach
+
+`[3, 1, 2]`:
+
+| pass | pairs compared | array after | swapped |
+|---|---|---|---|
+| 1 (rdx = 2) | (3,1) swap, (3,2) swap | 1 2 3 | yes |
+| 2 (rdx = 1) | (1,2) | 1 2 3 | no → stop |
+
+## Complexity
+
+O(n²) time worst case, O(n) when already sorted; O(1) space.
+
+## Common mistakes
+
+* **Storing both registers to the same slot**, which duplicates a value.
+* **Unsigned `jbe`**: negative numbers sort after positive ones.
+* **`cmpq %rax, %r10`** reverses the test: the array ends up sorted descending.""",
+    ),
 ), [("ldp x5, x6, [x3]", "load the adjacent pair cursor[0] and cursor[1] into x5 and x6 with one pair load"),
     ("b.le Lnoswap", "skip the swap if x5 <= x6 (signed)"),
     ("stp x6, x5, [x3]", "store the pair back in swapped order with one pair store")])
@@ -2375,6 +3708,86 @@ Make it fast without changing the recursion shape: pass an accumulator pair
 (`fib_helper(n, a, b)`) so the recursive call is the **last** thing the function does.
 Then the call can become a plain `b` (a tail call) and needs no frame at all: you have
 rediscovered the iterative loop from *Fibonacci (Iterative)*.""",
+    x86=dict(
+        solution="""# long long fib_recursive(long long n)
+# On entry: rdi = n       On exit: rax = F(n)
+.text                          # code section
+.globl _fib_recursive          # export the symbol
+.p2align 4                     # 16-byte alignment
+_fib_recursive:                # function entry (rsp = 8 mod 16: call pushed the return address)
+    cmpq $2, %rdi              # n < 2 ?
+    jl Lbase                   # base case: F(n) = n
+    pushq %rbp                 # save the caller's frame pointer
+    movq %rsp, %rbp            # rbp = this frame
+    pushq %rbx                 # save the caller's rbx (callee-saved)
+    pushq %r12                 # save the caller's r12; rsp is now 16-byte aligned again
+    movq %rdi, %rbx            # rbx = n (survives the calls)
+    leaq -1(%rbx), %rdi        # argument n - 1
+    callq _fib_recursive       # rax = F(n-1); rdi, rcx, ... may be clobbered
+    movq %rax, %r12            # r12 = F(n-1) (survives the next call)
+    leaq -2(%rbx), %rdi        # argument n - 2
+    callq _fib_recursive       # rax = F(n-2)
+    addq %r12, %rax            # rax = F(n-1) + F(n-2)
+    popq %r12                  # restore the caller's r12 (pops mirror the pushes)
+    popq %rbx                  # restore the caller's rbx
+    popq %rbp                  # restore the caller's frame pointer
+    ret                        # return F(n)
+Lbase:                         # n < 2
+    movq %rdi, %rax            # F(n) = n
+    ret                        # return
+""",
+        todos=[("pushq %rbp", "save the caller's frame pointer on the stack"),
+               ("pushq %rbx", "save the caller's callee-saved rbx before you use it"),
+               ("movq %rax, %r12", "keep F(n-1) (currently in rax) safe in the callee-saved register r12"),
+               ("popq %rbx", "restore the caller's rbx (restores come in reverse order of the saves)")],
+        notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = F(n)`.
+
+`call` pushes the return address and `ret` pops it, so there is no link register to
+save. What you must preserve is any **callee-saved** register you use (`%rbx`, `%rbp`,
+`%r12`–`%r15`), with `pushq`/`popq` in mirror order. Alignment rule: `%rsp` must be a
+multiple of 16 at each `call`. On entry it is 8 off (the return address), so the
+number of 8-byte pushes before a call must be **odd**.""",
+        hints=[
+            "Prologue: save `%rbp` and point it at the frame, then save the two callee-saved registers you will use. Three pushes plus the return address keep `%rsp` 16-aligned.",
+            "`n` lives in `%rbx` across both calls; `F(n-1)` needs another callee-saved register (`%r12`). Pops run in reverse order of pushes.",
+            "`pushq %rbp`, `pushq %rbx`, `movq %rax, %r12`, `popq %rbx`",
+        ],
+        explanation="""## Intuition
+
+F(n) = F(n−1) + F(n−2). Each call needs `n` and `F(n−1)` to survive a nested call, so
+they live in callee-saved registers, which the function must itself save and restore.
+
+## Approach
+
+Stack after the prologue (growing down):
+
+```text
+   +----------------------+
+   | return address       |  rsp+24   (pushed by call)
+   | caller's rbp         |  rsp+16   <- rbp points here
+   | caller's rbx         |  rsp+8
+   | caller's r12         |  rsp+0    (16-byte aligned)
+   +----------------------+
+```
+
+| call | rbx | r12 | rax on return |
+|---|---|---|---|
+| fib(3) | 3 | F(2) = 1 | 1 + F(1) = **2** |
+| └ fib(2) | 2 | F(1) = 1 | 1 + F(0) = 1 |
+
+## Complexity
+
+O(φⁿ) time (exponential), O(n) stack depth.
+
+## Common mistakes
+
+* **Even number of pushes before `call`**: `%rsp` is misaligned; macOS code that uses
+  aligned SSE stores (e.g. `printf`) then crashes. Count: return address + pushes.
+* **Popping in push order**: the caller's `%rbx` and `%r12` get swapped.
+* **Keeping `n` in `%rdi` or `%rcx`**: those are caller-saved and the call clobbers them.
+* **Unbalanced paths**: the base case must not run the epilogue, because it never ran
+  the prologue.""",
+    ),
 ), [("stp x29, x30, [sp, #-32]!", "allocate a 32-byte frame and save x29 and x30 at its bottom with one pre-indexed pair store"),
     ("stp x19, x20, [sp, #16]", "save the caller's callee-saved registers x19 and x20 in the upper half of the frame"),
     ("mov x20, x0", "keep F(n-1) (currently in x0) safe in the callee-saved register x20"),

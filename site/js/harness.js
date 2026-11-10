@@ -17,6 +17,7 @@ export const LANGS = {
   rust:     { id: 'rust',     label: 'Rust',     monaco: 'rust',     ext: 'rs',   comment: '//' },
   espresso: { id: 'espresso', label: 'ESPresso', monaco: 'espresso', ext: 'espr', comment: '//' },
   asm:      { id: 'asm',      label: 'ARM64 Asm', monaco: 'arm64',   ext: 's',    comment: '//' },
+  x86:      { id: 'x86',      label: 'x86-64 Asm', monaco: 'x86',    ext: 's',    comment: '#' },
 };
 
 export const MARK = '\x1e'; // record separator: prefixes harness result lines
@@ -51,7 +52,7 @@ function mutIndex(problem) {
 
 /** Which languages can solve this problem. */
 export function languagesFor(problem) {
-  if (problem.kind === 'asm') return ['asm'];
+  if (problem.kind === 'asm') return problem.x86_solution ? ['asm', 'x86'] : ['asm'];
   const all = ['python', 'c', 'cpp', 'rust'];
   if (problem.langs) return problem.langs.slice();
   if (espressoEligible(problem)) all.push('espresso');
@@ -814,6 +815,7 @@ export function starterCode(problem, lang) {
     case 'rust': return rustStarter(problem);
     case 'espresso': return espStarter(problem);
     case 'asm': return problem.asm_starter || '';
+    case 'x86': return problem.x86_starter || '';
     default: throw new Error(`Unknown language ${lang}`);
   }
 }
@@ -827,7 +829,7 @@ export function signature(problem, lang) {
     case 'cpp': return cppSig(problem);
     case 'rust': return rsSig(problem);
     case 'espresso': return `fn ${camel(problem.fn)}(${problem.params.map(([n]) => camel(n)).join(', ')})`;
-    case 'asm': return `long long ${problem.fn}(${cParams(problem, true).join(', ')})  // C view of your _${problem.fn}`;
+    case 'asm': case 'x86': return `long long ${problem.fn}(${cParams(problem, true).join(', ')})  // C view of your _${problem.fn}`;
     default: return null;
   }
 }
@@ -853,7 +855,7 @@ export function buildRun(problem, lang, code, tests) {
     case 'cpp': source = cppHarness(problem, code, tests); extra.headers = { 'bits/stdc++.h': CPP_BITS }; break;
     case 'rust': source = rustHarness(problem, code, tests); break;
     case 'espresso': source = espHarness(problem, code, tests); break;
-    case 'asm': source = cHarness(problem, '', tests, { asm: true }); extra.asm = code; break;
+    case 'asm': case 'x86': source = cHarness(problem, '', tests, { asm: true }); extra.asm = code; break;
     default: throw new Error(`Unknown language ${lang}`);
   }
   return { lang, mode: 'function', source, stdins: [''], ...extra };

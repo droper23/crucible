@@ -31,6 +31,7 @@ const TASKS = {
 // The on-device model has never seen ESPresso and is shaky on Apple ARM64; prime it.
 const PRIMERS = {
   espresso: 'ESPresso is NOT JavaScript. Syntax: `var x = 0`, `const k = 3`, `fn name(a, b) { ... }`, `if (c) { } else if (d) { } else { }`, `while (c) { }`, `for var i in 0..n { }` (n exclusive), `len(a)`, `print(x)`, `and`/`or` for logic. There is NO `let`, `function`, `Math`, `%`, `++`, `+=`, `.length`, `.push`, semicolons are optional. Arrays are fixed-size. Integer `/` truncates; modulo is `a - (a / b) * b`. Only suggest code in this syntax.',
+  x86: 'The code is x86-64 assembly in AT&T syntax for macOS (clang): `op src, dst` operand order, `%` register prefix, `$` immediates, size suffixes (movq/addl), symbols have a leading underscore. System V ABI: args in rdi, rsi, rdx, rcx, r8, r9; result in rax; rbx, rbp, r12-r15 are callee-saved; rsp must be 16-byte aligned at a call. `#` starts a comment.',
   asm: 'The code is ARM64 assembly for Apple Silicon macOS (clang syntax): symbols have a leading underscore, args arrive in x0-x7, the result goes in x0, x19-x28 are callee-saved, x18 is reserved, `//` starts a comment.',
 };
 

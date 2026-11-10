@@ -139,6 +139,30 @@ function registerLanguages(m) {
     },
   });
   m.languages.setLanguageConfiguration('arm64', { comments: { lineComment: '//', blockComment: ['/*', '*/'] } });
+
+  // x86-64 assembly (AT&T syntax, Apple clang).
+  m.languages.register({ id: 'x86' });
+  m.languages.setMonarchTokensProvider('x86', {
+    ignoreCase: true,
+    tokenizer: {
+      root: [
+        [/#\s*TODO.*$/, 'todo'],
+        [/#.*$/, 'comment'],
+        [/\/\*/, 'comment', '@block'],
+        [/^\s*[A-Za-z_.$][\w.$]*:/, 'label'],
+        [/^\s*\d+:/, 'label'],
+        [/%[a-z0-9]+/, 'register'],
+        [/\$-?(0x[0-9a-f]+|\d+)/, 'number'],
+        [/\.[a-z_0-9]+/, 'directive'],
+        [/-?\b(0x[0-9a-f]+|\d+)[fb]?\b/, 'number'],
+        [/"([^"\\]|\\.)*"/, 'string'],
+        [/^\s*[a-z][a-z0-9]*/, 'keyword'],
+        [/[(),]/, 'delimiter'],
+      ],
+      block: [[/\*\//, 'comment', '@pop'], [/./, 'comment']],
+    },
+  });
+  m.languages.setLanguageConfiguration('x86', { comments: { lineComment: '#', blockComment: ['/*', '*/'] } });
 }
 
 export async function createEditor(host, { value, language, onChange, onRun, onSubmit, settings }) {
@@ -187,7 +211,7 @@ export async function colorizeIn(root) {
   const blocks = root.querySelectorAll('pre code[data-lang]:not([data-colored])');
   if (!blocks.length) return;
   const m = await loadMonaco();
-  const map = { py: 'python', python: 'python', c: 'c', cpp: 'cpp', 'c++': 'cpp', rust: 'rust', rs: 'rust', javascript: 'espresso', js: 'espresso', espresso: 'espresso', espr: 'espresso', asm: 'arm64', s: 'arm64', arm64: 'arm64', bash: 'shell', sh: 'shell', shell: 'shell' };
+  const map = { py: 'python', python: 'python', c: 'c', cpp: 'cpp', 'c++': 'cpp', rust: 'rust', rs: 'rust', javascript: 'espresso', js: 'espresso', espresso: 'espresso', espr: 'espresso', asm: 'arm64', s: 'arm64', arm64: 'arm64', x86: 'x86', x86asm: 'x86', nasm: 'x86', att: 'x86', bash: 'shell', sh: 'shell', shell: 'shell' };
   for (const el of blocks) {
     el.dataset.colored = '1';
     const lang = map[el.dataset.lang.toLowerCase()];

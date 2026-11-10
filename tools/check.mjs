@@ -42,6 +42,7 @@ for (const p of data.problems) {
     let code, mustPass;
     if (lang === 'python') { code = p.solution; mustPass = true; }
     else if (lang === 'asm') { code = p.asm_solution; mustPass = true; }
+    else if (lang === 'x86') { code = p.x86_solution; mustPass = true; }
     else if (p.refs?.[lang]) { code = p.refs[lang]; mustPass = true; }
     else { code = starterCode(p, lang); mustPass = false; }
     if (!code) { tasks.push({ p, lang, skip: 'no code' }); continue; }
