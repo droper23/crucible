@@ -1,6 +1,6 @@
 // Crucible app: router + pages.
 import { store, dayKey } from './store.js';
-import { detectCompanion, onCompanion, companionInfo, execute, unavailableReason, warmPython } from './runner.js';
+import { detectCompanion, onCompanion, companionInfo, execute, unavailableReason, warmPython, connectBridge, bridgeNeeded } from './runner.js';
 import { LANGS, languagesFor, starterCode, buildRun, parseRun, signature, formatValue, camel } from './harness.js';
 import { createEditor, monacoTheme, loadMonaco } from './editor.js';
 import { md, renderMd, enhance, esc } from './md.js';
@@ -833,10 +833,23 @@ function companionPill() {
     const c = companionInfo();
     modal(`<h2>${c.status === 'connected' ? 'Local companion connected' : 'Unlock every language and the Coach'}</h2>
       ${c.status === 'connected'
-        ? `<p class="sub">Crucible is talking to the companion running on your Mac.</p><div class="lang-status">${Object.entries(c.health.langs).map(([l, v]) => `<div title="${esc(v || 'not found')}"><span class="${v ? 'ok' : 'no'}">${v ? '●' : '○'}</span>${LANGS[l]?.label || l}</div>`).join('')}<div title="${esc(c.health.ai?.reason || '')}"><span class="${c.health.ai?.available ? 'ok' : 'no'}">${c.health.ai?.available ? '●' : '○'}</span>Coach (Apple Intelligence)</div></div>${c.health.ai?.available ? '' : `<p class="sub">${esc(c.health.ai?.reason || '')}</p>`}`
-        : `<div class="md"><p>Right now Crucible runs <strong>Python</strong> in your browser. C, C++, Rust, ESPresso and ARM64 assembly need real compilers, and the Coach runs on Apple Intelligence, so those live in a tiny local companion.</p><p>From the Crucible folder, run:</p><pre><code data-lang="bash">./crucible</code></pre><p>Then open <a href="http://localhost:4747">http://localhost:4747</a>. To use the companion from a hosted copy of this site, start it with <code>CRUCIBLE_ORIGINS=${esc(location.origin)} ./crucible</code>.</p></div>`}
-      <div class="actions"><button class="btn" data-recheck>Re-check</button><button class="btn primary" data-close>Done</button></div>`, {
-      onMount: (el, close) => { el.querySelector('[data-recheck]').onclick = async () => { close(); await detectCompanion(); pill.click(); }; enhance(el); },
+        ? `<p class="sub">Crucible is talking to the companion running on your Mac${c.mode === 'bridge' ? ' through the bridge window (keep it open)' : ''}.</p><div class="lang-status">${Object.entries(c.health.langs).map(([l, v]) => `<div title="${esc(v || 'not found')}"><span class="${v ? 'ok' : 'no'}">${v ? '●' : '○'}</span>${LANGS[l]?.label || l}</div>`).join('')}<div title="${esc(c.health.ai?.reason || '')}"><span class="${c.health.ai?.available ? 'ok' : 'no'}">${c.health.ai?.available ? '●' : '○'}</span>Coach (Apple Intelligence)</div></div>${c.health.ai?.available ? '' : `<p class="sub">${esc(c.health.ai?.reason || '')}</p>`}`
+        : `<div class="md"><p>Right now Crucible runs <strong>Python</strong> in your browser. C, C++, Rust, ESPresso and ARM64 assembly need real compilers, and the Coach runs on Apple Intelligence, so those live in a tiny local companion.</p><p>From the Crucible folder, run:</p><pre><code data-lang="bash">./crucible</code></pre>${bridgeNeeded()
+          ? `<p>Then click <strong>Connect</strong>. Crucible opens a small bridge window from the companion (Safari won't let a web page talk to <code>localhost</code> directly); keep it open while you practise. Chrome may instead ask to allow access to devices on your local network: allow it and press Re-check.</p><p class="sub">Started the companion some other way? It must allow this site: <code>CRUCIBLE_ORIGINS=${esc(location.origin)} ./crucible</code></p>`
+          : `<p>Then open <a href="http://localhost:4747">http://localhost:4747</a>.</p>`}</div>`}
+      <div class="actions"><button class="btn" data-recheck>Re-check</button>${c.status !== 'connected' && bridgeNeeded() ? '<button class="btn primary" data-connect>Connect</button>' : '<button class="btn primary" data-close>Done</button>'}</div>`, {
+      onMount: (el, close) => {
+        el.querySelector('[data-recheck]').onclick = async () => { close(); await detectCompanion(); pill.click(); };
+        const cb = el.querySelector('[data-connect]');
+        if (cb) cb.onclick = async () => {
+          cb.disabled = true; cb.textContent = 'Connecting…';
+          const ok = await connectBridge();
+          close();
+          if (ok) toast('Companion connected'); else toast("Couldn't reach the companion. Is ./crucible running?");
+          pill.click();
+        };
+        enhance(el);
+      },
     });
   };
 }

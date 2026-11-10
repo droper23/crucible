@@ -28,6 +28,12 @@ const TASKS = {
   hint: 'Give me ONE small hint that moves me forward from where my code is now. Do not reveal the full approach or write the solution.',
 };
 
+// The on-device model has never seen ESPresso and is shaky on Apple ARM64; prime it.
+const PRIMERS = {
+  espresso: 'ESPresso is NOT JavaScript. Syntax: `var x = 0`, `const k = 3`, `fn name(a, b) { ... }`, `if (c) { } else if (d) { } else { }`, `while (c) { }`, `for var i in 0..n { }` (n exclusive), `len(a)`, `print(x)`, `and`/`or` for logic. There is NO `let`, `function`, `Math`, `%`, `++`, `+=`, `.length`, `.push`, semicolons are optional. Arrays are fixed-size. Integer `/` truncates; modulo is `a - (a / b) * b`. Only suggest code in this syntax.',
+  asm: 'The code is ARM64 assembly for Apple Silicon macOS (clang syntax): symbols have a leading underscore, args arrive in x0-x7, the result goes in x0, x19-x28 are callee-saved, x18 is reserved, `//` starts a comment.',
+};
+
 function instructions(lang) {
   const spoil = store.settings().coachSpoilers;
   return [
@@ -39,7 +45,9 @@ function instructions(lang) {
       ? 'You may show corrected code when it helps.'
       : 'Never write a complete solution. Show at most 3 lines of code to illustrate a fix.',
     'If you are not sure about something, say so plainly instead of guessing.',
-  ].join(' ');
+    'Trust the LATEST RUN: if every test passed, the code is correct; do not invent bugs or missing edge cases, focus on clarity and complexity instead.',
+    PRIMERS[lang] || '',
+  ].filter(Boolean).join(' ');
 }
 
 function runSummary(run) {
@@ -48,7 +56,8 @@ function runSummary(run) {
   if (run.compileError) return `COMPILE ERROR:\n${trim(run.compileError, BUDGET.run)}`;
   const res = run.results || [];
   const passed = res.filter((r) => r.status === 'pass').length;
-  let s = `${passed}/${res.length} tests passed.`;
+  let s = `${passed}/${res.length} ${run.submit ? 'tests (the full hidden suite)' : 'example tests'} passed.`;
+  if (passed === res.length && res.length) s += run.submit ? ' The solution is ACCEPTED and correct.' : ' (Only the examples were run.)';
   const f = res.find((r) => r.status !== 'pass');
   if (f) {
     s += `\nFIRST FAILING TEST:\n  input: ${trim(f.inputText || '', 400)}\n  expected: ${trim(formatValue(f.expected), 300)}`;

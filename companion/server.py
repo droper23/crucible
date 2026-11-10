@@ -4,6 +4,8 @@
   GET  /api/health   toolchain + Apple Intelligence status
   POST /api/run      compile and run code (C, C++, Rust, ARM64 asm, ESPresso, Python)
   POST /api/ai       stream a response from the on-device Apple Intelligence model
+  GET  /bridge       popup that relays API calls for a hosted copy of the site via
+                     postMessage (Safari blocks https pages from fetching http://localhost)
 
 Binds to 127.0.0.1 only. Cross-origin requests are accepted only from origins
 listed in CRUCIBLE_ORIGINS (comma separated) so a hosted copy of the site can
@@ -33,6 +35,56 @@ MAX_OUTPUT = 512 * 1024
 COMPILE_TIMEOUT = 60
 RUN_TIMEOUT = float(os.environ.get("CRUCIBLE_RUN_TIMEOUT", "10"))
 ORIGINS = {o.strip().rstrip("/") for o in os.environ.get("CRUCIBLE_ORIGINS", "").split(",") if o.strip()}
+
+BRIDGE_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crucible bridge</title>
+<style>
+:root { color-scheme: light dark; --bg: #f7f7f4; --fg: #1d1f24; --muted: #6b6f7b; --ok: #15803d; --bad: #c2410c; }
+@media (prefers-color-scheme: dark) { :root { --bg: #15171e; --fg: #e6e7eb; --muted: #8b90a0; --ok: #4ade80; --bad: #fb923c; } }
+body { margin: 0; padding: 24px; font: 14px/1.5 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+h1 { font-size: 16px; margin: 0 0 6px; } p { margin: 6px 0; color: var(--muted); } b { color: var(--fg); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+.on .dot { background: var(--ok); } .err .dot { background: var(--bad); }
+</style></head><body>
+<h1>&#x1F525; Crucible bridge</h1>
+<p id="st"><span class="dot"></span>Waiting for Crucible&hellip;</p>
+<p>This little window lets the hosted Crucible page use the companion on your Mac. <b>Keep it open</b> (minimise it if you like); closing it disconnects.</p>
+<script>
+const ALLOWED = __ORIGINS__;
+const st = document.getElementById('st');
+const show = (cls, html) => { document.body.className = cls; st.innerHTML = '<span class="dot"></span>' + html; };
+const aborts = new Map();
+let peer = null;
+if (!window.opener) show('err', 'Open this from the Crucible page (Connect button); it does nothing on its own.');
+else if (!ALLOWED.length) show('err', 'No hosted origins allowed. Restart the companion with <code>CRUCIBLE_ORIGINS=https://&lt;you&gt;.github.io ./crucible</code>.');
+// Announce ourselves to every allowed origin; postMessage only delivers to a matching one.
+// Repeats so a reloaded Crucible page re-attaches without another popup.
+function hello() {
+  if (!window.opener || window.opener.closed) { if (peer) show('err', 'The Crucible page was closed. You can close this window.'); return; }
+  for (const o of ALLOWED) { try { window.opener.postMessage({ type: 'crucible-bridge-ready' }, o); } catch (e) {} }
+}
+hello(); setInterval(hello, 1500);
+window.addEventListener('message', async (ev) => {
+  if (ev.source !== window.opener || !ALLOWED.includes(ev.origin)) return;
+  const m = ev.data || {};
+  const reply = (x) => ev.source.postMessage(Object.assign({ id: m.id }, x), ev.origin);
+  if (m.type === 'crucible-hello') { peer = ev.origin; show('on', 'Connected to <b>' + ev.origin + '</b>'); return; }
+  if (m.type === 'crucible-abort') { aborts.get(m.id)?.abort(); return; }
+  if (m.type !== 'crucible-req' || typeof m.path !== 'string' || !m.path.startsWith('/api/')) return;
+  const ctl = new AbortController(); aborts.set(m.id, ctl);
+  try {
+    const r = await fetch(m.path, { method: m.method || 'GET', headers: { 'Content-Type': 'application/json', 'X-Crucible': '1' }, body: m.body, signal: ctl.signal });
+    if (m.stream && r.ok) {
+      const rd = r.body.getReader(), dec = new TextDecoder();
+      for (;;) { const { value, done } = await rd.read(); if (done) break; reply({ type: 'crucible-chunk', text: dec.decode(value, { stream: true }) }); }
+      reply({ type: 'crucible-res', ok: true, status: r.status, text: '' });
+    } else reply({ type: 'crucible-res', ok: r.ok, status: r.status, text: await r.text() });
+  } catch (e) { reply({ type: 'crucible-res', ok: false, status: 0, error: String(e && e.message || e) }); }
+  finally { aborts.delete(m.id); }
+});
+</script></body></html>
+"""
 
 DEFAULT_ESPRESSO = Path.home() / "Projects/Code/Embedded/ESPresso/build/ESPresso"
 
@@ -214,6 +266,16 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path.split("?")[0] == "/bridge":
+            body = BRIDGE_HTML.replace("__ORIGINS__", json.dumps(sorted(ORIGINS))).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path.startswith("/api/"):
             if not self._origin_ok():
                 return self._json({"error": "forbidden"}, 403)

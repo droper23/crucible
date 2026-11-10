@@ -444,18 +444,20 @@ def contains_duplicate(nums):
     return False
 """),
     lang_notes={"c": _d(r"""
-No hash set in C? **Sort instead.** After `qsort`, duplicates are neighbours:
+No hash set in C? **Sorting** is a good substitute: think about where equal values end up
+in a sorted array. The standard library sorts with `qsort`, which needs a comparator that
+returns a negative number, zero or a positive number:
 
 ```c
 static int cmp_ll(const void* a, const void* b) {
     long long x = *(const long long*)a, y = *(const long long*)b;
     return (x > y) - (x < y);          // never `x - y`: it can overflow / truncate
 }
-qsort(nums, numsSize, sizeof(long long), cmp_ll);
-for (int i = 1; i < numsSize; i++) if (nums[i] == nums[i - 1]) return true;
+// qsort(array, element_count, element_size, comparator) sorts in place, e.g.
+//     qsort(arr, count, sizeof(long long), cmp_ll);
 ```
 
-That's O(n log n) and O(1) extra memory. For O(n), use the open-addressing table shown in
+Sorting costs O(n log n) time and O(1) extra memory. For O(n), use the open-addressing table shown in
 Two Sum's C notes, storing only keys.
 """)},
     refs={

@@ -72,6 +72,8 @@ use Python `None`). Language mappings:
 | list | ListNode | struct ListNode* | ListNode* | Option<Box<ListNode>> |
 | tree | TreeNode | struct TreeNode* | TreeNode* | Option<Rc<RefCell<TreeNode>>> |
 
+**Never leak the answer:** `starters`, `statement`, `lang_notes` and every hint except the last must never contain the solution (show syntax on a different example instead); `tools/build.py` warns when they contain a line of the reference solution.
+
 Keep ints within ±2⁵³. Results must be **deterministic and unique**. If several answers
 are valid, either specify a tie-break in the statement (e.g. "return the lexicographically
 smallest", "return indices in increasing order") or use a `compare` mode. There are no custom checkers.

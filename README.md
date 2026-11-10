@@ -34,17 +34,18 @@ through them). Reference data: `site/js/langdocs/<lang>.js` (schema in `SCHEMA.m
 
 ## Hosted copy (GitHub Pages / Vercel)
 
-`site/` is a static site. On a hosted copy, Python runs in the browser. To light up
-the other languages and the Coach from the hosted page, run the companion with that
-origin allowed:
+`site/` is a static site. On a hosted copy, Python runs in the browser. For the other
+languages and the Coach, run `./crucible` on your Mac (it automatically allows this repo's
+`https://<you>.github.io` origin; set `CRUCIBLE_ORIGINS` for anything else), then click the
+status pill (top right):
 
-```bash
-CRUCIBLE_ORIGINS=https://<you>.github.io ./crucible
-```
+- **Chrome:** connects directly once you allow access to the local network.
+- **Safari** (which blocks `https` pages from reaching `http://localhost`) and Chrome without
+  that permission: click **Connect**. It opens a small bridge window served by the companion that
+  relays requests via `postMessage`, only for allowed origins. Keep it open; reloading the
+  page re-attaches automatically.
 
-(Chrome will ask permission for the page to reach `localhost`. Safari blocks it, so use
-the local URL there.) Progress lives in each origin's `localStorage`; use
-**Settings → Export/Import** to move it.
+Progress lives in each origin's `localStorage`; use **Settings → Export/Import** to move it.
 
 - **GitHub Pages:** push to `main`; `.github/workflows/pages.yml` builds and deploys `site/`.
 - **Vercel:** `vercel deploy` (uses `vercel.json`, output dir `site/`). Commit

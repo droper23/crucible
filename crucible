@@ -6,6 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 PORT="${CRUCIBLE_PORT:-4747}"
+# Let this repo's GitHub Pages copy use the companion (direct in Chrome, via the /bridge popup in Safari).
+if [[ -z "${CRUCIBLE_ORIGINS:-}" ]]; then
+  remote="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$remote" =~ github\.com[:/]([^/]+)/ ]]; then
+    export CRUCIBLE_ORIGINS="https://$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]').github.io"
+  fi
+fi
 
 build_ai() {
   if [[ "$(uname)" == "Darwin" ]] && command -v swiftc >/dev/null; then

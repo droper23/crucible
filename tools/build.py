@@ -265,6 +265,91 @@ def build_problem(p, track_id, errors):
     return out
 
 
+# --- leak guard: learner-visible text must not contain reference-solution lines ---
+
+_SIG_RE = re.compile(
+    r"^(pub\s+)?(fn|def|class|struct|impl|use|import|from|using|template)\b"
+    r"|^#\s*include\b"
+    r"|^(static\s+|inline\s+|const\s+|unsigned\s+|struct\s+)*[A-Za-z_][\w:<>,\s\*&\[\]]*?[\s\*&]\**[A-Za-z_]\w*\s*\([^;=]*\)\s*(const\s*)?\{?$"
+)
+_CTRL_RE = re.compile(r"^(if|else|while|for|switch|return|do)\b")
+
+
+def _strip_comment(line: str, marker: str) -> str:
+    """Drop a trailing comment, ignoring markers inside string/char literals."""
+    q = None
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if q:
+            if c == "\\":
+                i += 2
+                continue
+            if c == q:
+                q = None
+        elif c in "\"'" and not (c == "'" and marker == "//" and line[i - 1:i].isalnum()):
+            q = c  # (Rust lifetimes like 'a are rare in solution bodies)
+        elif line.startswith(marker, i):
+            return line[:i]
+        i += 1
+    return line
+
+
+def _solution_lines(code: str, marker: str) -> list[tuple[str, str]]:
+    """Non-trivial lines of a reference solution as (original, whitespace-free)."""
+    out = []
+    for raw in code.splitlines():
+        s = raw.strip()
+        if not s or s.startswith(("/*", "*", marker)):
+            continue
+        s = _strip_comment(s, marker).strip()
+        if not s or re.fullmatch(r"[{}()\[\];,\s]*", s) or s in ("pass", "return 0;", "}"):
+            continue
+        if _SIG_RE.match(s) and not _CTRL_RE.match(s):
+            continue
+        # Spec-like one-liners: `return -1`, `return [-1, -1]`, `"invalid"`, `total = 0`.
+        if re.fullmatch(r"(return\s+)?(-?[\w.]+|\[[-\w\s,]*\]|\"[^\"]*\"|'[^']*');?", s) \
+                or re.fullmatch(r"(let\s+(mut\s+)?|var\s+|long\s+long\s+|int\s+)?\w+\s*=\s*-?\d+;?", s):
+            continue
+        key = re.sub(r"\s+", "", s)
+        if len(key) < 8:
+            continue
+        out.append((s, key))
+    return out
+
+
+def find_leaks(p) -> list[tuple[str, int, str]]:
+    """Return (field, line number, solution line) for every learner-visible line that
+    contains a non-trivial line of a reference solution."""
+    sols = _solution_lines(p.get("solution", ""), "#")
+    for lang, code in (p.get("refs") or {}).items():
+        sols += _solution_lines(code, "//")
+    asm = _solution_lines(p.get("asm_solution", ""), "//")
+    fields = []
+    for lang, s in (p.get("starters") or {}).items():
+        # Starter *code* is deliberate scaffolding (declarations, reads); only its
+        # comments can dictate the answer, so check just the comment text.
+        mk = "#" if lang == "python" else "//"
+        s = "\n".join(ln[len(_strip_comment(ln, mk)):] for ln in s.splitlines())
+        fields.append((f"starters[{lang}]", s, sols))
+    fields.append(("statement", p.get("statement", ""), sols + asm))
+    for lang, s in (p.get("lang_notes") or {}).items():
+        fields.append((f"lang_notes[{lang}]", s, sols + asm))
+    for i, h in enumerate((p.get("hints") or [])[:-1]):
+        fields.append((f"hints[{i}]", h, sols))
+    found = []
+    for name, text, cand in fields:
+        if not cand:
+            continue
+        for n, line in enumerate(text.splitlines(), 1):
+            key = re.sub(r"[\s`]+", "", line)
+            for orig, k in cand:
+                if k in key:
+                    found.append((name, n, orig))
+                    break
+    return found
+
+
 def load_module(path: Path):
     spec = importlib.util.spec_from_file_location(path.stem, path)
     mod = importlib.util.module_from_spec(spec)
@@ -279,6 +364,7 @@ def main():
     if "--only" in sys.argv:
         only = sys.argv[sys.argv.index("--only") + 1]
     errors: list[str] = []
+    leaks: list[tuple] = []
     tracks, problems = [], []
     seen = set()
     files = sorted(CONTENT.glob("*.py"))
@@ -303,6 +389,7 @@ def main():
                 continue
             seen.add(p.get("id"))
             bp = build_problem(p, tr["id"], errors)
+            leaks.extend((tr["id"], p.get("id"), *l) for l in find_leaks(p))
             if bp:
                 built.append(bp)
         tr["problems"] = [p["id"] for p in built]
@@ -313,6 +400,14 @@ def main():
     problems.sort(key=lambda p: (order[p["track"]], tracks[order[p["track"]]]["problems"].index(p["id"])))
     for i, p in enumerate(problems, 1):
         p["num"] = i
+    if leaks:
+        # Warning only: learner-visible text (starters, statement, lang_notes, all but the
+        # last hint) should never contain a line of the reference solution.
+        print(f"\nwarning: {len(leaks)} possible solution leak(s) in learner-visible text:", file=sys.stderr)
+        for tid, pid, field, n, line in leaks[:25]:
+            print(f" ~ {tid}/{pid} {field} line {n}: {line[:90]}", file=sys.stderr)
+        if len(leaks) > 25:
+            print(f" ~ ... and {len(leaks) - 25} more", file=sys.stderr)
     if errors:
         print(f"\n{len(errors)} error(s):", file=sys.stderr)
         for e in errors:

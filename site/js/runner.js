@@ -7,6 +7,82 @@ const subs = new Set();
 
 export function onCompanion(f) { subs.add(f); f(companion); return () => subs.delete(f); }
 export const companionInfo = () => companion;
+const publish = (c) => { companion = c; subs.forEach((f) => f(companion)); };
+
+// ------------------------------------------------------------ bridge transport
+// Safari (and Chrome without the local-network permission) won't let an https page fetch
+// http://localhost. The companion serves /bridge: a popup on its own origin that relays
+// API calls over postMessage, after checking our origin against its allow-list.
+const isHosted = () => location.protocol === 'https:' && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const companionUrl = () => (store.settings().companionUrl || 'http://localhost:4747').replace(/\/$/, '');
+let bridge = null;            // { win, origin }
+let bseq = 0;
+const bpending = new Map();   // id -> { resolve, reject, onChunk }
+
+window.addEventListener('message', (ev) => {
+  const m = ev.data;
+  if (!m || typeof m !== 'object' || typeof m.type !== 'string' || !m.type.startsWith('crucible-')) return;
+  let expected;
+  try { expected = new URL(companionUrl()).origin; } catch { return; }
+  if (ev.origin !== expected) return;
+  if (m.type === 'crucible-bridge-ready') {
+    const fresh = !bridge || bridge.win !== ev.source;
+    bridge = { win: ev.source, origin: ev.origin };
+    if (fresh) {
+      ev.source.postMessage({ type: 'crucible-hello' }, ev.origin);
+      if (companion.status !== 'connected') detectCompanion();
+    }
+    return;
+  }
+  const p = bpending.get(m.id);
+  if (!p) return;
+  if (m.type === 'crucible-chunk') p.onChunk?.(m.text);
+  else if (m.type === 'crucible-res') { bpending.delete(m.id); p.resolve(m); }
+});
+
+function bridgeAlive() { return !!bridge && !bridge.win.closed; }
+
+function viaBridge(path, { method = 'GET', body, stream = false, onChunk, signal, timeout = 0 } = {}) {
+  if (!bridgeAlive()) return Promise.reject(new TypeError('bridge closed'));
+  const id = ++bseq;
+  return new Promise((resolve, reject) => {
+    let timer = null;
+    const done = () => { clearTimeout(timer); clearInterval(watch); };
+    bpending.set(id, { resolve: (m) => { done(); resolve(m); }, reject, onChunk });
+    // Notice the popup being closed mid-request.
+    const watch = setInterval(() => { if (!bridgeAlive()) { done(); bpending.delete(id); reject(new TypeError('bridge closed')); } }, 1000);
+    if (timeout) timer = setTimeout(() => { done(); bpending.delete(id); reject(new TypeError('bridge timeout')); }, timeout);
+    signal?.addEventListener('abort', () => { bridge?.win.postMessage({ type: 'crucible-abort', id }, bridge.origin); done(); bpending.delete(id); reject(new DOMException('Aborted', 'AbortError')); });
+    bridge.win.postMessage({ type: 'crucible-req', id, path, method, body, stream }, bridge.origin);
+  });
+}
+
+/** Open the bridge popup (must be called from a click). Resolves once connected or after a timeout. */
+export function connectBridge() {
+  const win = window.open(`${companionUrl()}/bridge`, 'crucible-bridge', 'popup,width=420,height=260');
+  if (!win) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      if (companion.status === 'connected' && companion.mode === 'bridge') { clearInterval(iv); resolve(true); }
+      else if (Date.now() - t0 > 6000 || win.closed) { clearInterval(iv); resolve(false); }
+    }, 200);
+  });
+}
+export const bridgeNeeded = () => isHosted() && companion.status !== 'connected';
+
+/** JSON API call through whichever transport is connected. */
+async function api(path, body) {
+  if (companion.mode === 'bridge') {
+    const m = await viaBridge(path, { method: body ? 'POST' : 'GET', body: body && JSON.stringify(body) });
+    if (m.error) throw new TypeError(m.error);
+    return JSON.parse(m.text);
+  }
+  const r = await fetch(`${companion.base}${path}`, body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Crucible': '1' }, body: JSON.stringify(body) }
+    : { headers: { 'X-Crucible': '1' } });
+  return r.json();
+}
 
 function candidates() {
   const out = [];
@@ -18,6 +94,12 @@ function candidates() {
 }
 
 export async function detectCompanion() {
+  if (bridgeAlive()) {
+    try {
+      const m = await viaBridge('/api/health', { timeout: 4000 });
+      if (m.ok) { publish({ status: 'connected', health: JSON.parse(m.text), base: bridge.origin, mode: 'bridge' }); return companion; }
+    } catch { /* fall through */ }
+  }
   for (const base of candidates()) {
     try {
       const ctl = new AbortController();
@@ -26,21 +108,19 @@ export async function detectCompanion() {
       clearTimeout(t);
       if (r.ok) {
         const health = await r.json();
-        companion = { status: 'connected', health, base };
-        subs.forEach((f) => f(companion));
+        publish({ status: 'connected', health, base, mode: 'direct' });
         return companion;
       }
     } catch { /* try next */ }
   }
-  companion = { status: 'offline', health: null, base: '' };
-  subs.forEach((f) => f(companion));
+  publish({ status: 'offline', health: null, base: '', mode: null });
   return companion;
 }
 
 /** Can this language run right now? Returns null if yes, or a reason string. */
 export function unavailableReason(lang) {
   if (lang === 'python') return null;
-  if (companion.status !== 'connected') return 'Start the local companion (./crucible) to run this language.';
+  if (companion.status !== 'connected') return isHosted() ? 'Start ./crucible on your Mac, then click the status pill (top right) to connect.' : 'Start the local companion (./crucible) to run this language.';
   const v = companion.health?.langs?.[lang];
   if (!v) {
     if (lang === 'espresso') return 'ESPresso binary not found. Build ESPresso or set CRUCIBLE_ESPRESSO, then restart the companion.';
@@ -105,12 +185,7 @@ async function runPyodide(req, onStatus) {
 
 async function runCompanion(req, onStatus) {
   onStatus?.(['c', 'cpp', 'rust', 'asm'].includes(req.lang) ? 'Compiling & running…' : 'Running…');
-  const r = await fetch(`${companion.base}/api/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Crucible': '1' },
-    body: JSON.stringify(req),
-  });
-  const j = await r.json();
+  const j = await api('/api/run', req);
   if (j.error) throw new Error(j.error);
   return j;
 }
@@ -134,12 +209,19 @@ export async function execute(req, onStatus) {
 // ------------------------------------------------------------ AI coach
 
 export function aiStatus() {
-  if (companion.status !== 'connected') return { available: false, reason: 'The Coach runs on Apple Intelligence through the local companion. Start ./crucible to enable it.' };
+  if (companion.status !== 'connected') return { available: false, reason: `The Coach runs on Apple Intelligence through the local companion. Start ./crucible to enable it${isHosted() ? ', then click the status pill (top right) to connect' : ''}.` };
   return companion.health?.ai || { available: false, reason: 'Unknown' };
 }
 
 /** Stream a completion; calls onDelta(text) as chunks arrive. Returns full text. */
 export async function streamAI({ instructions, prompt, temperature = 0.3, signal }, onDelta) {
+  if (companion.mode === 'bridge') {
+    let full = '';
+    const m = await viaBridge('/api/ai', { method: 'POST', body: JSON.stringify({ instructions, prompt, temperature }), stream: true, signal, onChunk: (t) => { full += t; onDelta(t, full); } });
+    if (m.error) throw new Error(m.error);
+    if (!m.ok) { let msg = `HTTP ${m.status}`; try { msg = JSON.parse(m.text).error || msg; } catch {} throw new Error(msg); }
+    return full;
+  }
   const r = await fetch(`${companion.base}/api/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Crucible': '1' },

@@ -200,22 +200,22 @@ PROBLEMS.append(dict(
     statement=r"""
 A potentiometer is wired to a 10-bit ADC, so `analogRead()` returns `0…1023`. The PWM
 peripheral wants `0…255`. Arduino's famous `map()` converts between ranges with
-integer math only:
+integer math only: it stretches the line through `(in_min, out_min)` and
+`(in_max, out_max)` and reads off the value at `x`, but every step is an integer step.
 
-```c
-long map(long x, long in_min, long in_max, long out_min, long out_max) {
-    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-```
+Implement `map_range(x, in_min, in_max, out_min, out_max)` with **exactly** that
+integer behaviour, computed in this order:
 
-Implement `map_range(x, in_min, in_max, out_min, out_max)` with **exactly** this
-behaviour:
+1. `N = (x - in_min) · (out_max - out_min)`, an exact integer product.
+2. `D = in_max - in_min` (never zero).
+3. `Q = N / D` using **C integer division, which truncates toward zero**:
+   `7 / 2 == 3`, `-7 / 2 == -3`, `7 / -2 == -3`.
+4. The result is `Q + out_min`.
 
-- Compute `(x - in_min) * (out_max - out_min)` and divide it by `(in_max - in_min)`
-  using **C integer division, which truncates toward zero** (`-7 / 2 == -3`).
-- Add `out_min`.
-- Do **not** clamp: `x` may lie outside `[in_min, in_max]`, and either range may be
-  "reversed" (`out_min > out_max` or `in_min > in_max`).
+The order matters: multiply **before** dividing, and divide only once. Dividing first, or
+using a fractional scale factor and rounding, gives different answers on the tests.
+Do **not** clamp: `x` may lie outside `[in_min, in_max]`, and either range may be
+"reversed" (`out_min > out_max` or `in_min > in_max`), which makes `N` or `D` negative.
 """,
     constraints=["`in_min ≠ in_max`", "`|(x - in_min) · (out_max - out_min)| < 2³¹`", "all values fit in 32-bit signed ints"],
     example_notes=[
