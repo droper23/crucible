@@ -445,3 +445,10 @@ body.resizing, body.resizing * { user-select: none !important; cursor: inherit; 
   .page { padding: 22px 16px 60px; }
   .ptable .hide-sm { display: none; }
 }
+
+/* account / sync */
+.account-btn { height: 30px; min-width: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+.account-btn:hover { border-color: var(--accent); }
+.account-btn.in { padding: 0; width: 30px; }
+.account-btn.in img { width: 100%; height: 100%; object-fit: cover; }
+.account-btn.err { border-color: var(--bad); }

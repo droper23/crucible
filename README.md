@@ -45,11 +45,25 @@ status pill (top right):
   relays requests via `postMessage`, only for allowed origins. Keep it open; reloading the
   page re-attaches automatically.
 
-Progress lives in each origin's `localStorage`; use **Settings → Export/Import** to move it.
+Progress lives in each origin's `localStorage`; sign in to sync it (see Progress sync) or use **Settings → Export/Import**.
 
 - **GitHub Pages:** push to `main`; `.github/workflows/pages.yml` builds and deploys `site/`.
 - **Vercel:** `vercel deploy` (uses `vercel.json`, output dir `site/`). Commit
   `site/data/problems.json` first, since Vercel doesn't run the Python build.
+
+## Progress sync
+
+Progress lives in the browser (localStorage) and works offline. **Sign in** (top right, or Settings → Sync progress) with Google to sync solved problems, drafts, submissions, hints and your streak across browsers and devices. Merging never loses work: solves and history are unioned, and the newest edit of each draft wins.
+
+It uses the same Firebase project as learn-assembly (`farsi-f2116`) but its own collection, `crucibleProgress/{uid}`. One-time setup in the Firebase console → Firestore Database → Rules, merged alongside the existing rules:
+
+```
+match /crucibleProgress/{uid} {
+  allow read, write: if request.auth != null && request.auth.uid == uid;
+}
+```
+
+`localhost` is authorized for sign-in already; a hosted domain (e.g. `droper23.github.io`) must be listed under Authentication → Settings → Authorized domains.
 
 ## Content
 

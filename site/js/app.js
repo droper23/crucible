@@ -5,6 +5,7 @@ import { LANGS, languagesFor, starterCode, buildRun, parseRun, signature, format
 import { createEditor, monacoTheme, loadMonaco } from './editor.js';
 import { md, renderMd, enhance, esc } from './md.js';
 import { mountCoach } from './coach.js';
+import { initSync, onSync, signIn, signOut, syncState, warmSync } from './sync.js';
 import { setIdeContext, introducedEntries, entryCard, parseDiagnostics, showDiagnostics, clearDiagnostics, trackDiagnosticEdits } from './ide.js';
 
 const DIFF = ['First Steps', 'Easy', 'Medium', 'Hard', 'Expert'];
@@ -770,7 +771,7 @@ function pageSettings() {
   $app.innerHTML = `
   <div class="page page-narrow">
     <h1 class="h-xl">Settings</h1>
-    <p class="sub" style="margin-bottom:22px">Everything is stored locally in this browser.</p>
+    <p class="sub" style="margin-bottom:22px">Everything is stored in this browser; sign in to sync it across devices.</p>
 
     <div class="card settings-group">
       <div class="setting"><div class="l"><b>Theme</b><span>Match your system, or pick one.</span></div>
@@ -794,6 +795,8 @@ function pageSettings() {
     </div>
 
     <div class="card settings-group">
+      <div class="setting"><div class="l"><b>Sync progress</b><span data-sync-status></span></div>
+        <div class="r"><button class="btn sm" data-sync-btn></button></div></div>
       <div class="setting"><div class="l"><b>Back up progress</b><span>Download solved problems, drafts and history as JSON.</span></div>
         <div class="r"><button class="btn sm" data-export>Export</button><label class="btn sm">Import<input type="file" accept="application/json" hidden data-import></label></div></div>
       <div class="setting"><div class="l"><b style="color:var(--bad)">Reset everything</b><span>Erase all progress and drafts in this browser.</span></div>
@@ -812,6 +815,14 @@ function pageSettings() {
     store.setSetting(inp.dataset.i, inp.type === 'number' ? Number(inp.value) : inp.value.trim());
     if (inp.dataset.i === 'companionUrl') detectCompanion().then(() => pageSettings());
   }));
+  const $ss = $app.querySelector('[data-sync-status]'), $sb = $app.querySelector('[data-sync-btn]');
+  const unsync = onSync((st) => {
+    if (!$ss.isConnected) return unsync?.();
+    $ss.textContent = syncLabel(st, true);
+    $sb.textContent = st.user ? 'Sign out' : 'Sign in with Google';
+  });
+  $sb.onclick = () => (syncState().user ? signOut() : signIn());
+  warmSync();
   $app.querySelector('[data-recheck]').onclick = async () => { await detectCompanion(); pageSettings(); toast(companionInfo().status === 'connected' ? 'Companion connected' : 'Companion not found'); };
   $app.querySelector('[data-export]').onclick = () => {
     const a = document.createElement('a');
@@ -825,6 +836,30 @@ function pageSettings() {
   $app.querySelector('[data-reset]').onclick = () => modal(`<h2>Reset all progress?</h2><p class="sub">This permanently erases solved problems, drafts, and history in this browser. Consider exporting a backup first.</p><div class="actions"><button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Erase everything</button></div>`, {
     onMount: (el, close) => { el.querySelector('[data-ok]').onclick = () => { store.reset(); close(); toast('Progress reset'); location.hash = '#/'; }; },
   });
+}
+
+// ------------------------------------------------------------------ account / sync
+function syncLabel(st, long = false) {
+  if (st.message) return st.message;
+  if (!st.user) return long ? 'Sign in with Google to keep solved problems, drafts and your streak in sync across browsers and devices. Everything also stays in this browser.' : '';
+  const who = st.user.email || st.user.name;
+  if (st.status === 'syncing') return `Syncing as ${who}…`;
+  if (st.status === 'synced') return `Synced as ${who}${st.at ? ` · ${new Date(st.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`;
+  return `Signed in as ${who}`;
+}
+
+function accountButton() {
+  const b = document.getElementById('account-btn');
+  onSync((st) => {
+    b.classList.toggle('in', !!st.user);
+    b.classList.toggle('err', st.status === 'error' || !!st.message);
+    if (st.user) {
+      b.innerHTML = st.user.photo ? `<img src="${esc(st.user.photo)}" alt="" referrerpolicy="no-referrer">` : esc((st.user.name || '?')[0].toUpperCase());
+    } else b.textContent = 'Sign in';
+    b.title = syncLabel(st, true);
+  });
+  b.onclick = () => (syncState().user ? (location.hash = '#/settings') : signIn());
+  b.addEventListener('pointerenter', warmSync, { once: true });
 }
 
 // ------------------------------------------------------------------ companion pill
@@ -867,6 +902,8 @@ function companionPill() {
 // ------------------------------------------------------------------ boot
 async function boot() {
   companionPill();
+  initSync();
+  accountButton();
   detectCompanion();
   try {
     const r = await fetch('data/problems.json', { cache: 'no-cache' });
@@ -877,7 +914,11 @@ async function boot() {
   }
   byId = new Map(DATA.problems.map((p) => [p.id, p]));
   window.addEventListener('hashchange', route);
-  store.onChange((what) => { if (what === 'settings') applyTheme(); });
+  store.onChange((what) => {
+    if (what === 'settings') applyTheme();
+    // Progress merged from another device: refresh lists/stats, but never rebuild an open editor.
+    if (what === 'remote' && !location.hash.startsWith('#/p/')) route();
+  });
   setInterval(() => { if (companionInfo().status !== 'connected') detectCompanion(); }, 15000);
   route();
   // Warm Monaco in the background so the first problem opens instantly.
