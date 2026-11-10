@@ -961,6 +961,22 @@ def max_area(height):
     return best
 """),
     refs={
+        "c": _d(r"""
+            long long max_area(long long* height, int heightSize) {
+                // Two pointers start at the widest pair and move inward.
+                int lo = 0, hi = heightSize - 1;
+                long long best = 0;
+                while (lo < hi) {
+                    long long h = height[lo] < height[hi] ? height[lo] : height[hi];   // the shorter line caps the water
+                    long long area = (long long)(hi - lo) * h;
+                    if (area > best) best = area;
+                    // Moving the taller line can only shrink the width without raising the cap,
+                    // so the shorter line can never be part of a better pair: drop it.
+                    if (height[lo] < height[hi]) lo++; else hi--;
+                }
+                return best;
+            }
+        """),
         "cpp": _d(r"""
             long long maxArea(vector<long long>& height) {
                 int lo = 0, hi = (int)height.size() - 1;
@@ -1114,6 +1130,57 @@ def three_sum(nums):
     return out
 """),
     refs={
+        "c": _d(r"""
+            static int cmp_ll(const void* a, const void* b) {
+                long long x = *(const long long*)a, y = *(const long long*)b;
+                return (x > y) - (x < y);          // never `x - y`: it can overflow / truncate to int
+            }
+
+            // Appends the triplet (a, b, c) to a growable array of malloc-ed rows.
+            static void push3(long long*** res, int* count, int* cap, long long a, long long b, long long c) {
+                if (*count == *cap) {                              // double when full: amortised O(1)
+                    *cap = *cap ? 2 * *cap : 8;
+                    *res = realloc(*res, *cap * sizeof(long long*));
+                }
+                long long* row = malloc(3 * sizeof(long long));
+                row[0] = a; row[1] = b; row[2] = c;
+                (*res)[(*count)++] = row;
+            }
+
+            long long** three_sum(long long* nums, int numsSize, int* returnSize, int** returnColumnSizes) {
+                // Sort a private copy so the caller's array is left untouched.
+                long long* a = malloc((numsSize ? numsSize : 1) * sizeof(long long));
+                memcpy(a, nums, numsSize * sizeof(long long));
+                qsort(a, numsSize, sizeof(long long), cmp_ll);
+
+                long long** res = NULL;
+                int count = 0, cap = 0;
+                for (int i = 0; i + 2 < numsSize; i++) {
+                    if (a[i] > 0) break;                           // smallest value positive: no zero sum left
+                    if (i > 0 && a[i] == a[i - 1]) continue;       // same first value -> same triplets
+                    int lo = i + 1, hi = numsSize - 1;
+                    while (lo < hi) {
+                        long long s = a[i] + a[lo] + a[hi];
+                        if (s < 0) lo++;                           // need a bigger sum
+                        else if (s > 0) hi--;                      // need a smaller sum
+                        else {
+                            push3(&res, &count, &cap, a[i], a[lo], a[hi]);
+                            lo++; hi--;
+                            // Skip equal neighbours so the same (a[lo], a[hi]) pair isn't reported twice.
+                            while (lo < hi && a[lo] == a[lo - 1]) lo++;
+                            while (lo < hi && a[hi] == a[hi + 1]) hi--;
+                        }
+                    }
+                }
+                free(a);
+
+                *returnSize = count;
+                *returnColumnSizes = malloc((count ? count : 1) * sizeof(int));
+                for (int i = 0; i < count; i++) (*returnColumnSizes)[i] = 3;
+                if (!res) res = malloc(sizeof(long long*));        // empty result: still a valid pointer
+                return res;
+            }
+        """),
         "cpp": _d(r"""
             vector<vector<long long>> threeSum(vector<long long>& nums) {
                 sort(nums.begin(), nums.end());
@@ -2182,6 +2249,20 @@ def sorted_squares(nums):
     return out
 """),
     refs={
+        "c": _d(r"""
+            long long* sorted_squares(long long* nums, int numsSize, int* returnSize) {
+                // The largest square sits at one of the two ends (most negative or most positive),
+                // so fill the output from the back, taking the bigger end each time.
+                long long* out = malloc((numsSize ? numsSize : 1) * sizeof(long long));
+                int lo = 0, hi = numsSize - 1;
+                for (int k = numsSize - 1; k >= 0; k--) {
+                    if (llabs(nums[lo]) > llabs(nums[hi])) { out[k] = nums[lo] * nums[lo]; lo++; }
+                    else                                   { out[k] = nums[hi] * nums[hi]; hi--; }
+                }
+                *returnSize = numsSize;
+                return out;
+            }
+        """),
         "cpp": _d(r"""
             vector<long long> sortedSquares(vector<long long>& nums) {
                 int n = nums.size(), lo = 0, hi = n - 1;
@@ -3271,6 +3352,18 @@ def pivot_index(nums):
     return -1
 """),
     refs={
+        "c": _d(r"""
+            long long pivot_index(long long* nums, int numsSize) {
+                long long total = 0, left = 0;
+                for (int i = 0; i < numsSize; i++) total += nums[i];
+                for (int i = 0; i < numsSize; i++) {
+                    // right side = everything except the left side and nums[i] itself
+                    if (left == total - left - nums[i]) return i;   // first hit is the leftmost
+                    left += nums[i];
+                }
+                return -1;
+            }
+        """),
         "cpp": _d(r"""
             long long pivotIndex(vector<long long>& nums) {
                 long long total = accumulate(nums.begin(), nums.end(), 0LL), left = 0;

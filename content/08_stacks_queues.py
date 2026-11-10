@@ -1429,6 +1429,33 @@ doubling their capacity.)
     return out
 ''',
     refs={
+        "c": r"""// Two stacks as plain arrays with a top counter. `in` receives pushes; `out` serves
+// pops/peeks. When `out` runs dry we pour all of `in` into it, which reverses the order
+// so the oldest element ends up on top. Each element moves at most once: amortised O(1).
+typedef struct { long long* in; int nin; long long* out; int nout; } Queue;
+
+static void shift(Queue* q) {
+    if (q->nout == 0)
+        while (q->nin > 0) q->out[q->nout++] = q->in[--q->nin];
+}
+
+long long* queue_via_stacks(char** ops, int opsSize, long long* vals, int valsSize, int* returnSize) {
+    (void)valsSize;
+    int cap = opsSize ? opsSize : 1;           // never more elements than operations
+    Queue q = { malloc(cap * sizeof(long long)), 0, malloc(cap * sizeof(long long)), 0 };
+    long long* res = malloc(cap * sizeof(long long));
+    int n = 0;
+    for (int i = 0; i < opsSize; i++) {
+        if (strcmp(ops[i], "push") == 0) q.in[q.nin++] = vals[i];
+        else if (strcmp(ops[i], "pop") == 0) { shift(&q); res[n++] = q.out[--q.nout]; }
+        else if (strcmp(ops[i], "peek") == 0) { shift(&q); res[n++] = q.out[q.nout - 1]; }
+        else res[n++] = (q.nin == 0 && q.nout == 0) ? 1 : 0;   // "empty"
+    }
+    free(q.in); free(q.out);
+    *returnSize = n;
+    return res;
+}
+""",
         "cpp": '''class MyQueue {
     vector<long long> in, out;     // two stacks
     void shift() {
@@ -1779,6 +1806,47 @@ very long outputs.
     return cur
 ''',
     refs={
+        "c": r"""// A growable string: C has no std::string, so track length and capacity ourselves.
+typedef struct { char* s; size_t len, cap; } Buf;
+
+static void buf_append(Buf* b, const char* src, size_t n) {
+    if (b->len + n + 1 > b->cap) {
+        while (b->len + n + 1 > b->cap) b->cap = b->cap ? 2 * b->cap : 16;
+        b->s = realloc(b->s, b->cap);
+    }
+    memcpy(b->s + b->len, src, n);
+    b->len += n;
+    b->s[b->len] = '\0';
+}
+
+// Decodes from s[*pos] until a ']' or the end, appending to out. Each "k[" recurses for
+// the bracketed part, so the C call stack plays the role of the explicit stack.
+static void decode(const char* s, size_t* pos, Buf* out) {
+    while (s[*pos] && s[*pos] != ']') {
+        if (s[*pos] >= '0' && s[*pos] <= '9') {
+            long long k = 0;
+            while (s[*pos] >= '0' && s[*pos] <= '9') k = k * 10 + (s[(*pos)++] - '0');
+            (*pos)++;                               // skip '['
+            Buf inner = {0};
+            decode(s, pos, &inner);
+            (*pos)++;                               // skip ']'
+            for (long long r = 0; r < k; r++) buf_append(out, inner.s ? inner.s : "", inner.len);
+            free(inner.s);
+        } else {
+            buf_append(out, s + *pos, 1);           // plain letter
+            (*pos)++;
+        }
+    }
+}
+
+char* decode_string(char* s) {
+    Buf out = {0};
+    buf_append(&out, "", 0);                       // guarantees a malloc-ed "" for empty input
+    size_t pos = 0;
+    decode(s, &pos, &out);
+    return out.s;
+}
+""",
         "cpp": '''string decodeString(string s) {
     vector<pair<string, int>> st;     // (outer text, repeat count)
     string cur;
@@ -2293,6 +2361,27 @@ def min_window(s, t):
     return "" if best_len == float("inf") else s[best_start:best_start + best_len]
 ''',
     refs={
+        "c": r"""char* min_window(char* s, char* t) {
+    int need[128] = {0};                        // ASCII-indexed: how many more of each char we need
+    int missing = 0;
+    for (const char* p = t; *p; p++) { need[(unsigned char)*p]++; missing++; }
+    int n = (int)strlen(s), bestStart = 0, bestLen = -1;
+    for (int left = 0, right = 0; right < n; right++) {
+        // Test, then decrement: a positive count means this char was still needed.
+        if (need[(unsigned char)s[right]]-- > 0) missing--;
+        while (missing == 0) {                   // window is valid: shrink from the left
+            if (bestLen < 0 || right - left + 1 < bestLen) { bestLen = right - left + 1; bestStart = left; }
+            if (++need[(unsigned char)s[left]] > 0) missing++;   // gave up a needed char
+            left++;
+        }
+    }
+    if (bestLen < 0) bestLen = 0;                // no window: return ""
+    char* out = malloc(bestLen + 1);
+    memcpy(out, s + bestStart, bestLen);
+    out[bestLen] = '\0';
+    return out;
+}
+""",
         "cpp": '''string minWindow(string s, string t) {
     int need[128] = {0};                 // ASCII-indexed counts
     for (char c : t) need[(unsigned char)c]++;

@@ -623,6 +623,63 @@ def group_anagrams(strs):
     return list(groups.values())
 """),
     refs={
+        "c": _d(r"""
+            // C has no hash map of strings, so we group by *sorting* instead: give every word its
+            // canonical key (its letters sorted), sort the word indices by key, and equal keys end
+            // up adjacent. Each run of equal keys is one group.
+            static char** g_keys;                      // qsort's comparator can't take extra arguments
+
+            static int cmp_idx(const void* a, const void* b) {
+                int i = *(const int*)a, j = *(const int*)b;
+                int c = strcmp(g_keys[i], g_keys[j]);
+                return c ? c : (i > j) - (i < j);      // tie-break on index: deterministic order
+            }
+
+            // Canonical key: counting sort of the bytes, O(len) instead of O(len log len).
+            static char* sorted_key(const char* s) {
+                int cnt[256] = {0};
+                size_t n = strlen(s);
+                for (size_t i = 0; i < n; i++) cnt[(unsigned char)s[i]]++;
+                char* k = malloc(n + 1);
+                size_t p = 0;
+                for (int c = 0; c < 256; c++)
+                    while (cnt[c]--) k[p++] = (char)c;
+                k[n] = '\0';
+                return k;
+            }
+
+            static char* dup_str(const char* s) {
+                size_t n = strlen(s) + 1;
+                return memcpy(malloc(n), s, n);        // the caller owns every string we return
+            }
+
+            char*** group_anagrams(char** strs, int strsSize, int* returnSize, int** returnColumnSizes) {
+                g_keys = malloc((strsSize ? strsSize : 1) * sizeof(char*));
+                int* order = malloc((strsSize ? strsSize : 1) * sizeof(int));
+                for (int i = 0; i < strsSize; i++) { g_keys[i] = sorted_key(strs[i]); order[i] = i; }
+                qsort(order, strsSize, sizeof(int), cmp_idx);
+
+                // At most strsSize groups; allocate for the worst case.
+                char*** res = malloc((strsSize ? strsSize : 1) * sizeof(char**));
+                int* cols = malloc((strsSize ? strsSize : 1) * sizeof(int));
+                int groups = 0;
+                for (int i = 0; i < strsSize;) {
+                    int j = i;
+                    while (j < strsSize && strcmp(g_keys[order[i]], g_keys[order[j]]) == 0) j++;
+                    // order[i..j) all share one key: that's one group of j - i words.
+                    res[groups] = malloc((j - i) * sizeof(char*));
+                    for (int t = i; t < j; t++) res[groups][t - i] = dup_str(strs[order[t]]);
+                    cols[groups++] = j - i;
+                    i = j;
+                }
+
+                for (int i = 0; i < strsSize; i++) free(g_keys[i]);
+                free(g_keys); free(order);
+                *returnSize = groups;
+                *returnColumnSizes = cols;
+                return res;
+            }
+        """),
         "cpp": _d(r"""
             vector<vector<string>> groupAnagrams(vector<string>& strs) {
                 unordered_map<string, vector<string>> groups;
@@ -773,6 +830,45 @@ def top_k_frequent(nums, k):
     return ranked[:k]
 """),
     refs={
+        "c": _d(r"""
+            typedef struct { long long val, cnt; } Item;
+
+            static int cmp_ll(const void* a, const void* b) {
+                long long x = *(const long long*)a, y = *(const long long*)b;
+                return (x > y) - (x < y);
+            }
+
+            // Ranking order: higher count first, then smaller value first.
+            static int cmp_item(const void* a, const void* b) {
+                const Item *x = a, *y = b;
+                if (x->cnt != y->cnt) return (x->cnt < y->cnt) - (x->cnt > y->cnt);   // descending
+                return (x->val > y->val) - (x->val < y->val);                          // ascending
+            }
+
+            long long* top_k_frequent(long long* nums, int numsSize, long long k, int* returnSize) {
+                // Without a built-in hash map, counting by sorting is simplest: after qsort, equal
+                // values are adjacent, so one scan turns runs into (value, count) pairs.
+                long long* a = malloc((numsSize ? numsSize : 1) * sizeof(long long));
+                memcpy(a, nums, numsSize * sizeof(long long));      // don't reorder the caller's data
+                qsort(a, numsSize, sizeof(long long), cmp_ll);
+
+                Item* items = malloc((numsSize ? numsSize : 1) * sizeof(Item));
+                int m = 0;
+                for (int i = 0; i < numsSize;) {
+                    int j = i;
+                    while (j < numsSize && a[j] == a[i]) j++;
+                    items[m++] = (Item){ a[i], j - i };
+                    i = j;
+                }
+                qsort(items, m, sizeof(Item), cmp_item);
+
+                long long* out = malloc((k ? k : 1) * sizeof(long long));
+                for (long long i = 0; i < k; i++) out[i] = items[i].val;
+                *returnSize = (int)k;
+                free(a); free(items);
+                return out;
+            }
+        """),
         "cpp": _d(r"""
             vector<long long> topKFrequent(vector<long long>& nums, long long k) {
                 unordered_map<long long, long long> cnt;
@@ -1448,6 +1544,45 @@ def word_pattern(pattern, s):
     return True
 """),
     refs={
+        "c": _d(r"""
+            bool word_pattern(char* pattern, char* s) {
+                // Split s into words without copying: record where each word starts and its length.
+                size_t plen = strlen(pattern), slen = strlen(s);
+                const char** start = malloc((slen + 1) * sizeof(char*));
+                size_t* len = malloc((slen + 1) * sizeof(size_t));
+                size_t nw = 0;
+                for (size_t i = 0; i < slen;) {
+                    size_t j = i;
+                    while (j < slen && s[j] != ' ') j++;
+                    start[nw] = s + i; len[nw] = j - i; nw++;
+                    i = j + 1;                                     // skip the single space
+                }
+                bool ok = nw == plen;                              // one word per letter
+
+                // firstWord[c] = index of the word letter c maps to, or -1 if c is unseen.
+                // Letters are only 'a'..'z', so a 26-slot array is our "hash map".
+                int firstWord[26];
+                for (int c = 0; c < 26; c++) firstWord[c] = -1;
+                for (size_t i = 0; ok && i < plen; i++) {
+                    int c = pattern[i] - 'a';
+                    if (firstWord[c] >= 0) {
+                        // Letter seen before: this word must equal the one it already maps to.
+                        int w = firstWord[c];
+                        ok = len[w] == len[i] && memcmp(start[w], start[i], len[i]) == 0;
+                    } else {
+                        // New letter: its word must not already belong to a *different* letter.
+                        // At most 26 letters are mapped, so this check is O(26).
+                        for (int d = 0; d < 26 && ok; d++) {
+                            int w = firstWord[d];
+                            if (w >= 0 && len[w] == len[i] && memcmp(start[w], start[i], len[i]) == 0) ok = false;
+                        }
+                        firstWord[c] = (int)i;
+                    }
+                }
+                free(start); free(len);
+                return ok;
+            }
+        """),
         "cpp": _d(r"""
             bool wordPattern(string pattern, string s) {
                 istringstream in(s);
@@ -1944,6 +2079,49 @@ def four_sum_count(nums1, nums2, nums3, nums4):
     return total
 """),
     refs={
+        "c": _d(r"""
+            // Open-addressing hash map: pair sum -> how many (i, j) produce it (see the Two Sum C notes).
+            static size_t mix64(long long k) {
+                unsigned long long x = (unsigned long long)k;
+                x ^= x >> 30; x *= 0xbf58476d1ce4e5b9ULL;
+                x ^= x >> 27; x *= 0x94d049bb133111ebULL;
+                return (size_t)(x ^ (x >> 31));
+            }
+
+            long long four_sum_count(long long* nums1, int nums1Size, long long* nums2, int nums2Size,
+                                     long long* nums3, int nums3Size, long long* nums4, int nums4Size) {
+                // Meet in the middle: n^2 sums of the left half go into the table, then each of the
+                // n^2 right-half sums looks up its negation. O(n^2) instead of O(n^4).
+                size_t pairs = (size_t)nums1Size * nums2Size;
+                size_t cap = 4;
+                while (cap < 2 * pairs) cap <<= 1;                 // load factor <= 0.5
+                size_t mask = cap - 1;
+                long long* keys = malloc(cap * sizeof(long long));
+                long long* cnt = malloc(cap * sizeof(long long));
+                bool* used = calloc(cap, sizeof(bool));
+
+                for (int i = 0; i < nums1Size; i++)
+                    for (int j = 0; j < nums2Size; j++) {
+                        long long s = nums1[i] + nums2[j];
+                        size_t h = mix64(s) & mask;
+                        while (used[h] && keys[h] != s) h = (h + 1) & mask;    // probe
+                        if (!used[h]) { used[h] = true; keys[h] = s; cnt[h] = 0; }
+                        cnt[h]++;
+                    }
+
+                long long total = 0;
+                for (int k = 0; k < nums3Size; k++)
+                    for (int l = 0; l < nums4Size; l++) {
+                        long long need = -(nums3[k] + nums4[l]);
+                        size_t h = mix64(need) & mask;
+                        while (used[h] && keys[h] != need) h = (h + 1) & mask;
+                        if (used[h]) total += cnt[h];              // every matching left pair counts
+                    }
+
+                free(keys); free(cnt); free(used);
+                return total;
+            }
+        """),
         "cpp": _d(r"""
             long long fourSumCount(vector<long long>& nums1, vector<long long>& nums2,
                                    vector<long long>& nums3, vector<long long>& nums4) {
@@ -2198,6 +2376,110 @@ def lru_cache(capacity, ops, args):
     return out
 """),
     refs={
+        "c": _d(r"""
+            // The classic design: a doubly linked list ordered by recency (head = most recent,
+            // tail = least recent) plus a hash map key -> list node. Both give O(1) operations.
+            // Nodes live in one array and link by index; -1 plays the role of NULL.
+            typedef struct {
+                long long key, val;
+                int prev, next;      // recency list
+                int hnext;           // next node in the same hash bucket (separate chaining)
+            } Node;
+
+            typedef struct {
+                Node* nodes; int used;          // node pool; slots are recycled on eviction
+                int* bucket; size_t mask;       // bucket[h] = first node index in chain h, or -1
+                int head, tail, size;
+                long long cap;
+            } LRU;
+
+            static size_t mix64(long long k) {
+                unsigned long long x = (unsigned long long)k;
+                x ^= x >> 30; x *= 0xbf58476d1ce4e5b9ULL;
+                x ^= x >> 27; x *= 0x94d049bb133111ebULL;
+                return (size_t)(x ^ (x >> 31));
+            }
+
+            static int find(LRU* c, long long key) {
+                for (int i = c->bucket[mix64(key) & c->mask]; i >= 0; i = c->nodes[i].hnext)
+                    if (c->nodes[i].key == key) return i;
+                return -1;
+            }
+
+            static void unlink_node(LRU* c, int i) {           // remove i from the recency list
+                Node* n = &c->nodes[i];
+                if (n->prev >= 0) c->nodes[n->prev].next = n->next; else c->head = n->next;
+                if (n->next >= 0) c->nodes[n->next].prev = n->prev; else c->tail = n->prev;
+            }
+
+            static void push_front(LRU* c, int i) {            // make i the most recent
+                c->nodes[i].prev = -1;
+                c->nodes[i].next = c->head;
+                if (c->head >= 0) c->nodes[c->head].prev = i; else c->tail = i;
+                c->head = i;
+            }
+
+            static void bucket_remove(LRU* c, int i) {          // unlink i from its hash chain
+                int* p = &c->bucket[mix64(c->nodes[i].key) & c->mask];
+                while (*p != i) p = &c->nodes[*p].hnext;
+                *p = c->nodes[i].hnext;
+            }
+
+            static long long lru_get(LRU* c, long long key) {
+                int i = find(c, key);
+                if (i < 0) return -1;
+                unlink_node(c, i); push_front(c, i);            // touched: now most recent
+                return c->nodes[i].val;
+            }
+
+            static long long lru_put(LRU* c, long long key, long long val) {
+                int i = find(c, key);
+                if (i >= 0) {                                   // update in place
+                    c->nodes[i].val = val;
+                    unlink_node(c, i); push_front(c, i);
+                    return -1;
+                }
+                long long evicted = -1;
+                if (c->size == c->cap) {                        // full: drop the tail, reuse its slot
+                    i = c->tail;
+                    evicted = c->nodes[i].key;
+                    unlink_node(c, i);
+                    bucket_remove(c, i);
+                    c->size--;
+                } else {
+                    i = c->used++;                              // fresh slot from the pool
+                }
+                c->nodes[i].key = key; c->nodes[i].val = val;
+                size_t h = mix64(key) & c->mask;
+                c->nodes[i].hnext = c->bucket[h];               // insert at the chain's head
+                c->bucket[h] = i;
+                push_front(c, i);
+                c->size++;
+                return evicted;
+            }
+
+            long long* lru_cache(long long capacity, char** ops, int opsSize, long long** args, int argsSize,
+                                 int* argsColSize, int* returnSize) {
+                (void)argsSize; (void)argsColSize;
+                // The cache never holds more than min(capacity, #ops) entries, so size the pool to that.
+                long long slots = capacity < opsSize ? capacity : opsSize;
+                LRU c = { .used = 0, .head = -1, .tail = -1, .size = 0, .cap = capacity };
+                c.nodes = malloc((slots + 1) * sizeof(Node));
+                size_t nb = 4;
+                while (nb < 2 * (size_t)(slots + 1)) nb <<= 1;
+                c.mask = nb - 1;
+                c.bucket = malloc(nb * sizeof(int));
+                for (size_t b = 0; b < nb; b++) c.bucket[b] = -1;
+
+                long long* out = malloc((opsSize ? opsSize : 1) * sizeof(long long));
+                for (int i = 0; i < opsSize; i++)
+                    out[i] = strcmp(ops[i], "get") == 0 ? lru_get(&c, args[i][0])
+                                                        : lru_put(&c, args[i][0], args[i][1]);
+                *returnSize = opsSize;
+                free(c.nodes); free(c.bucket);
+                return out;
+            }
+        """),
         "cpp": _d(r"""
             class LRUCache {
                 size_t cap;

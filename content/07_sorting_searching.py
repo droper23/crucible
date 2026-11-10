@@ -1830,6 +1830,23 @@ The `<=` in `nums[lo] <= nums[mid]` matters: when `lo == mid` (two elements left
     return -1
 ''',
     refs={
+        "c": r"""long long search_rotated(long long* nums, int numsSize, long long target) {
+    int lo = 0, hi = numsSize - 1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;          // avoids (lo + hi) overflow
+        if (nums[mid] == target) return mid;
+        // One of the two halves around mid is always sorted; find which.
+        if (nums[lo] <= nums[mid]) {           // left half [lo, mid] sorted
+            if (nums[lo] <= target && target < nums[mid]) hi = mid - 1;
+            else lo = mid + 1;
+        } else {                               // right half [mid, hi] sorted
+            if (nums[mid] < target && target <= nums[hi]) lo = mid + 1;
+            else hi = mid - 1;
+        }
+    }
+    return -1;
+}
+""",
         "cpp": '''long long searchRotated(vector<long long>& nums, long long target) {
     long long lo = 0, hi = (long long)nums.size() - 1;
     while (lo <= hi) {
@@ -2164,6 +2181,17 @@ Trace on `[1, 3, 8, 12, 4, 2]`:
     return lo
 ''',
     refs={
+        "c": r"""long long find_peak(long long* nums, int numsSize) {
+    // Invariant: the peak is always inside [lo, hi].
+    int lo = 0, hi = numsSize - 1;
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;          // mid < hi, so nums[mid + 1] is in bounds
+        if (nums[mid] < nums[mid + 1]) lo = mid + 1;   // uphill: peak is to the right
+        else hi = mid;                                 // downhill or at the peak
+    }
+    return lo;
+}
+""",
         "cpp": '''long long findPeak(vector<long long>& nums) {
     size_t lo = 0, hi = nums.size() - 1;
     while (lo < hi) {

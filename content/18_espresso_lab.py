@@ -243,6 +243,16 @@ behaviour:
     return q + out_min
 ''',
     refs={
+        "c": r"""// This IS Arduino's map(), character for character. On an AVR `long` is only
+// 32 bits; the constraints keep the product below 2^31 so that is safe there,
+// but we use 64-bit math here because a *difference* of two 32-bit values (say
+// out_max - out_min) can itself need 33 bits.
+// C's "/" truncates toward zero, which is exactly the behaviour asked for.
+long long map_range(long long x, long long in_min, long long in_max, long long out_min, long long out_max) {
+    int64_t num = (x - in_min) * (out_max - out_min);
+    int64_t den = in_max - in_min;          // non-zero by the constraints
+    return num / den + out_min;
+}""",
         "espresso": r'''// Arduino map(): ESPresso's "/" already truncates toward zero, exactly like
 // C's long division, so the formula ports over unchanged.
 fn mapRange(x, inMin, inMax, outMin, outMax) {
@@ -385,6 +395,18 @@ Implement `joystick_axis(raw, center, deadband, limit)`:
     return max(-limit, min(limit, value))
 ''',
     refs={
+        "c": r"""// Deadband, shrink toward zero, then clamp. Firmware C has no std::clamp,
+// so the saturation is two plain comparisons. (int64_t: raw - center of two
+// 32-bit values can need 33 bits.)
+long long joystick_axis(long long raw, long long center, long long deadband, long long limit) {
+    int64_t off = raw - center;
+    if (off >= -deadband && off <= deadband) return 0;   // stick at rest
+    int64_t v = off > 0 ? off - deadband                 // start at +/-1 just outside
+                        : off + deadband;
+    if (v > limit) v = limit;
+    if (v < -limit) v = -limit;
+    return v;
+}""",
         "espresso": r'''// Deadband then clamp. ESPresso has no abs/min/max, so compare explicitly.
 fn joystickAxis(raw, center, deadband, limit) {
     var offset = raw - center
@@ -538,6 +560,15 @@ That is the two's complement of the low byte of the sum. An empty record has che
     return (256 - low) % 256
 ''',
     refs={
+        "c": r"""// A uint8_t accumulator wraps modulo 256 on its own, just like the 8-bit
+// register a bootloader would use. Negating it (as unsigned) gives the
+// two's complement checksum, and the cast back to uint8_t keeps one byte.
+long long hex_checksum(long long* record, int recordSize) {
+    uint8_t sum = 0;
+    for (int i = 0; i < recordSize; i++)
+        sum = (uint8_t)(sum + (uint8_t)record[i]);   // wraps mod 256
+    return (uint8_t)(0u - sum);                       // 0 stays 0
+}""",
         "espresso": r'''// ESPresso has no % operator. Instead, mimic a uint8_t accumulator: after each
 // add, fold the sum back into 0..255. Each byte is <= 255, so one subtraction suffices.
 fn hexChecksum(record) {
@@ -677,6 +708,21 @@ Return the number of **rising edges** (low → high transitions) over the sample
     return edges
 ''',
     refs={
+        "c": r"""// Two-state machine: which threshold we compare against depends on the state.
+long long schmitt_edges(long long* signal, int signalSize, long long low, long long high) {
+    bool out_high = false;           // output starts low
+    uint32_t edges = 0;
+    for (int i = 0; i < signalSize; i++) {
+        if (!out_high && signal[i] >= high) {
+            out_high = true;         // rising edge
+            edges++;
+        } else if (out_high && signal[i] <= low) {
+            out_high = false;        // falling edge (not counted)
+        }
+        // between low and high: hold the current state (the hysteresis)
+    }
+    return edges;
+}""",
         "espresso": r'''// A two-state machine. The threshold we test depends on the current state.
 fn schmittEdges(signal, low, high) {
     var outHigh = false
@@ -821,6 +867,19 @@ with `hi = n` squares numbers in the millions and overflows.
     return lo
 ''',
     refs={
+        "c": r"""// Binary search on the answer, kept 32-bit safe:
+//  * hi starts at 46340 = floor(sqrt(2^31 - 1)), never at n;
+//  * "mid <= n / mid" asks "mid * mid <= n" without ever forming the square.
+long long isqrt(long long n) {
+    int32_t v = (int32_t)n;
+    int32_t lo = 0, hi = v < 46340 ? v : 46340;
+    while (lo < hi) {
+        int32_t mid = lo + (hi - lo + 1) / 2;   // round up so lo = mid always progresses
+        if (mid <= v / mid) lo = mid;           // mid >= 1 here, so no divide by zero
+        else hi = mid - 1;
+    }
+    return lo;
+}""",
         "espresso": r'''// Binary search on the answer. hi starts at 46340 so mid * mid can never
 // exceed 46340^2 = 2147395600 < 2^31: no silent 32-bit wraparound.
 fn isqrt(n) {
@@ -994,6 +1053,25 @@ Return the number of times the debounced state flips from `0` to `1` (clean pres
     return presses
 ''',
     refs={
+        "c": r"""// Counter debouncer, the body of a 1 ms timer ISR run over a recorded trace.
+long long count_presses(long long* samples, int samplesSize, long long k) {
+    uint8_t state = 0;      // debounced output: 0 = released
+    uint8_t run = 0;        // consecutive samples that disagree with `state`
+    uint32_t presses = 0;
+    for (int i = 0; i < samplesSize; i++) {
+        uint8_t raw = (uint8_t)samples[i];
+        if (raw == state) {
+            run = 0;        // a bounce back resets the count
+            continue;
+        }
+        if (++run == k) {   // stable for k ticks: accept the new level
+            state = raw;
+            run = 0;
+            if (state) presses++;   // count only 0 -> 1 flips
+        }
+    }
+    return presses;
+}""",
         "espresso": r'''// Counter-based debouncer, the same logic you'd run in a 1 ms timer interrupt.
 fn countPresses(samples, k) {
     var state = 0
@@ -1161,6 +1239,21 @@ multiple of `0.5` (the sensor's resolution).
     return best / window
 ''',
     refs={
+        "c": r"""// Running-sum SMA: add the sample entering the window, subtract the one leaving.
+// Samples are multiples of 0.5, so every partial sum is exact in a double and
+// the comparison of sums is exact too. Divide once at the end (a power of two,
+// so the division is exact as well).
+double peak_average(double* samples, int samplesSize, long long window) {
+    int w = (int)window;
+    double sum = 0.0;
+    for (int i = 0; i < w; i++) sum += samples[i];
+    double best = sum;
+    for (int i = w; i < samplesSize; i++) {
+        sum += samples[i] - samples[i - w];
+        if (sum > best) best = sum;
+    }
+    return best / w;
+}""",
         "espresso": r'''// Sliding-window sum. The accumulator starts at 0.0: if it started at 0 and all
 // samples happened to be whole numbers, sum / window would be an *integer* division.
 fn peakAverage(samples, window) {
@@ -1332,6 +1425,30 @@ The buffer starts empty.
                 count -= 1
 ''',
     refs={
+        "c": r"""// A static ring buffer exactly as firmware declares it: fixed storage, a head
+// (next byte to read), a tail (next free slot) and a count to tell full from empty.
+#define UART_BUF_MAX 16
+
+void uart_fifo(long long capacity, long long* ops, int opsSize) {
+    uint8_t buf[UART_BUF_MAX];
+    uint8_t head = 0, tail = 0, count = 0;
+    uint8_t cap = (uint8_t)capacity;
+    for (int i = 0; i < opsSize; i++) {
+        if (ops[i] >= 0) {                      // RX interrupt: a byte arrived
+            if (count == cap) { ops[i] = 0; continue; }   // full: drop the NEW byte
+            buf[tail] = (uint8_t)ops[i];
+            tail = (uint8_t)((tail + 1) % cap); // wrap around the end
+            count++;
+            ops[i] = 1;
+        } else if (count == 0) {                // main loop read, nothing there
+            ops[i] = -1;
+        } else {                                // main loop read: oldest byte first
+            ops[i] = buf[head];
+            head = (uint8_t)((head + 1) % cap);
+            count--;
+        }
+    }
+}""",
         "espresso": r'''// ESPresso arrays can't be allocated with a runtime size, so do what firmware
 // does: reserve the maximum (16 bytes) statically and use only `capacity` of it.
 fn uartFifo(capacity, ops) {
@@ -1533,6 +1650,20 @@ Tests show the values as ordinary integers. For example `0x0010` appears as `16`
     return encode((decode(a) + decode(b)) % 10000)
 ''',
     refs={
+        "c": r"""// BCD digit-by-digit addition, the way an RTC driver does it: add nibble pairs
+// plus the carry; if the digit sum passes 9, subtract 10 and carry 1. No
+// conversion to binary needed. The carry out of the 4th digit is the rollover.
+long long bcd_add(long long a, long long b) {
+    uint16_t x = (uint16_t)a, y = (uint16_t)b, out = 0;
+    uint8_t carry = 0;
+    for (int i = 0; i < 4; i++) {
+        uint8_t d = (uint8_t)(((x >> (4 * i)) & 0xF) + ((y >> (4 * i)) & 0xF) + carry);
+        carry = d > 9;
+        if (carry) d -= 10;
+        out |= (uint16_t)(d << (4 * i));
+    }
+    return out;            // final carry is discarded: 9999 + 1 -> 0000
+}""",
         "espresso": r'''// No bit operators and no %: shifts by 4 bits are "/ 16" and "* 16", and the
 // low digit is x - (x / base) * base.
 fn mod(x, m) {
@@ -1704,6 +1835,24 @@ All LEDs start their cycle at tick 0. Count the ticks `t` in `[0, ticks)` at whi
     return count
 ''',
     refs={
+        "c": r"""// One software timer (phase counter) per LED instead of a "%" per tick: on a
+// small MCU a division is expensive, an increment-and-compare is not.
+#define MAX_LEDS 8
+
+long long led_overlap(long long* periods, int periodsSize, long long* duties, int dutiesSize, long long ticks) {
+    (void)dutiesSize;
+    uint8_t phase[MAX_LEDS] = {0};          // all cycles start at tick 0
+    uint32_t count = 0;
+    for (long long t = 0; t < ticks; t++) {
+        bool all_on = true;
+        for (int i = 0; i < periodsSize; i++) {
+            if (phase[i] >= duties[i]) all_on = false;   // LED i is off this tick
+            if (++phase[i] == periods[i]) phase[i] = 0;  // advance its timer
+        }
+        if (all_on) count++;
+    }
+    return count;
+}""",
         "espresso": r'''// Each LED is a closure that owns its phase counter, like a software timer
 // object. No modulo needed: the phase wraps when it hits the period.
 fn makeBlinker(period, duty) {
@@ -1877,6 +2026,25 @@ buffer, so make sure each output uses the **original** input values.
         samples[n] = max(-32768, min(32767, y))
 ''',
     refs={
+        "c": r"""// In-place FIR: walk from the LAST sample backwards. Output n only reads inputs
+// n, n-1, ..., all of which are still untouched when we get to n.
+void fir_q8(long long* samples, int samplesSize, long long* taps, int tapsSize) {
+    for (int n = samplesSize - 1; n >= 0; n--) {
+        // |sample| <= 2^15 and |tap| <= 2^9 with 4 taps: |acc| < 2^27, so int32 is plenty.
+        int32_t acc = 0;
+        for (int k = 0; k < tapsSize && n - k >= 0; k++)
+            acc += (int32_t)taps[k] * (int32_t)samples[n - k];
+        // Q8 -> integer, rounding half away from zero: round the magnitude, then
+        // put the sign back (C's "/" truncates toward zero).
+        int32_t mag = ((acc >= 0 ? acc : -acc) + 128) / 256;
+        int32_t y = acc >= 0 ? mag : -mag;
+        // Saturate to int16 instead of letting it wrap: a clipped sample sounds
+        // bad, a wrapped one sounds like a gunshot.
+        if (y > INT16_MAX) y = INT16_MAX;
+        if (y < INT16_MIN) y = INT16_MIN;
+        samples[n] = y;
+    }
+}""",
         "espresso": r'''// In-place FIR: iterate from the last sample backwards so that every input we
 // still need is untouched when we read it.
 fn firQ8(samples, taps) {
@@ -2053,6 +2221,24 @@ Overwrite `measurements[i]` with the output for tick `i`.
         measurements[i] = max(-255, min(255, out))
 ''',
     refs={
+        "c": r"""// Integer PID with Q8 gains, anti-windup clamp and a saturated PWM output.
+static int32_t clamp_i32(int32_t v, int32_t lo, int32_t hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+}
+
+void pid_controller(long long setpoint, long long* measurements, int measurementsSize,
+                    long long kp, long long ki, long long kd) {
+    int32_t integral = 0, prev_error = 0;
+    for (int i = 0; i < measurementsSize; i++) {
+        int32_t error = (int32_t)(setpoint - measurements[i]);
+        integral = clamp_i32(integral + error, -1000, 1000);    // anti-windup
+        int32_t derivative = i == 0 ? 0 : error - prev_error;   // no kick on tick 0
+        prev_error = error;
+        // Worst case |u| <= 1024 * (2000 + 1000 + 4000) ~ 7.2M: fits in int32.
+        int32_t u = (int32_t)kp * error + (int32_t)ki * integral + (int32_t)kd * derivative;
+        measurements[i] = clamp_i32(u / 256, -255, 255);       // "/" truncates toward 0
+    }
+}""",
         "espresso": r'''// Integer PID. ESPresso's "/" truncates toward zero, exactly as specified.
 // The `first` flag keeps the derivative at 0 on the first tick.
 fn clamp(v, lo, hi) {

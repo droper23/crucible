@@ -5,6 +5,7 @@ import { LANGS, languagesFor, starterCode, buildRun, parseRun, signature, format
 import { createEditor, monacoTheme, loadMonaco } from './editor.js';
 import { md, renderMd, enhance, esc } from './md.js';
 import { mountCoach } from './coach.js';
+import { setIdeContext, parseDiagnostics, showDiagnostics, clearDiagnostics, trackDiagnosticEdits } from './ide.js';
 
 const DIFF = ['First Steps', 'Easy', 'Medium', 'Hard', 'Expert'];
 const LANG_SHORT = { python: 'PY', c: 'C', cpp: 'C++', rust: 'RS', espresso: 'ESP', asm: 'ASM' };
@@ -301,6 +302,7 @@ async function pageProblem(id) {
           <button class="btn sm ghost" data-cheat title="Open the cheat sheet for this language">📘 Cheat sheet</button>
           <span class="saved-ind" data-saved></span>
           <span class="spacer"></span>
+          <span class="cursor-pos" data-cursor title="Hover a name for docs · ⌃Space completions · ⌘⇧Space parameter hints · F12 / ⌘-click go to definition · ⌘⇧O outline · F8 next error · F1 command palette"></span>
           <button class="btn sm ghost" data-reset title="Reset to starter code">↺ Reset</button>
         </div>
         <div class="editor-host" data-editor><div class="loading"><div class="spinner"></div></div></div>
@@ -435,6 +437,7 @@ async function pageProblem(id) {
   const initial = store.draft(p.id, lang) ?? starterCode(p, lang);
   let savedTimer = null;
   const savedInd = $l('[data-saved]');
+  setIdeContext(p, lang);
   createEditor(host, {
     value: initial,
     language: LANGS[lang].monaco,
@@ -450,7 +453,18 @@ async function pageProblem(id) {
   }).then((r) => {
     host.querySelector('.loading')?.remove();
     editor = r.editor; monaco = r.monaco;
-    cleanup.push(() => editor.dispose());
+    const diagSub = trackDiagnosticEdits(monaco, editor);
+    const curEl = $l('[data-cursor]');
+    const showCursor = () => {
+      const pos = editor.getPosition();
+      const n = monaco.editor.getModelMarkers({ owner: 'crucible', resource: editor.getModel().uri }).length;
+      if (curEl) curEl.innerHTML = `${n ? `<span class="diag-count">● ${n} problem${n > 1 ? 's' : ''}</span> · ` : ''}Ln ${pos.lineNumber}, Col ${pos.column}`;
+    };
+    editor.onDidChangeCursorPosition(showCursor);
+    const markSub = monaco.editor.onDidChangeMarkers(showCursor);
+    cleanup.push(() => markSub.dispose());
+    showCursor();
+    cleanup.push(() => { diagSub.dispose(); clearDiagnostics(monaco, editor); editor.dispose(); });
   }).catch(() => { host.innerHTML = `<div class="empty">Couldn't load the code editor. Check your internet connection (Monaco loads from a CDN).</div>`; });
 
   function switchLang(l, code) {
@@ -458,7 +472,9 @@ async function pageProblem(id) {
     store.setLastLang(l);
     $l('[data-langsel]').value = l;
     const val = code ?? store.draft(p.id, l) ?? starterCode(p, l);
+    setIdeContext(p, l);
     if (editor) {
+      clearDiagnostics(monaco, editor);
       const model = editor.getModel();
       monaco.editor.setModelLanguage(model, LANGS[l].monaco);
       editor.setValue(val);
@@ -572,6 +588,7 @@ async function pageProblem(id) {
     const code = editor.getValue();
     const tests = submit ? p.tests : p.tests.slice(0, p.examples);
     running = 'Preparing…';
+    clearDiagnostics(monaco, editor);
     updateRunState();
     showConsole('result');
     const setStatus = (s) => { running = s; const n = cbody.querySelector('[data-rs]'); if (n) n.textContent = s; };
@@ -587,6 +604,11 @@ async function pageProblem(id) {
     }
     running = false;
     lastRun = out;
+    {
+      const text = [out.compileOutput, out.compileError, out.stderr, out.error, ...(out.results || []).map((r) => r.error)].filter(Boolean).join('\n');
+      const diags = parseDiagnostics(lang, text, code.split('\n').length, p.kind === 'io');
+      if (diags.length) showDiagnostics(monaco, editor, diags);
+    }
     updateRunState();
     renderResult();
     const tabs = $app.querySelector('[data-ctabs] [data-ctab="result"]');

@@ -315,7 +315,7 @@ print(millis() >= 0)                     // milliseconds since start
 ```
 
 Other built-ins: `len(x)` (arrays and strings), `typeOf(x)`. On the ESP32, modules
-`"gpio"` (`pinMode`, `digitalWrite`…), `"time"` (`delay`, `setTimeout`, `setInterval`)
+`gpio` (`gpio.pinMode`, `gpio.write`, `gpio.read`), `"event"` (`on`, `emit`), `json` (`json.stringify`, `json.parse`). `setTimeout` and `setInterval` are global (there is no `clearTimeout`/`clearInterval`); `"time"`'s `delay` is a deprecated no-op that only prints a warning
 and `"event"` (`on`, `emit`) talk to hardware. There is no stdin reading, so `io`
 problems with input aren't available in ESPresso.
 

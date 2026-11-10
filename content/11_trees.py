@@ -715,6 +715,30 @@ def preorder_traversal(root):
     return out
 ''',
     refs={
+        "c": r'''
+/* Count first so we can malloc the result exactly once: a tree with n nodes
+ * produces exactly n values, and the explicit stack never holds more than n. */
+static int count(struct TreeNode* n) {
+    return n ? 1 + count(n->left) + count(n->right) : 0;
+}
+
+long long* preorder_traversal(struct TreeNode* root, int* returnSize) {
+    int n = count(root);
+    long long* out = malloc(sizeof(long long) * (size_t)(n ? n : 1));
+    struct TreeNode** st = malloc(sizeof(struct TreeNode*) * (size_t)(n ? n : 1));
+    int len = 0, top = 0;
+    if (root) st[top++] = root;
+    while (top > 0) {
+        struct TreeNode* cur = st[--top];
+        out[len++] = cur->val;                 /* record on arrival: node, then children */
+        if (cur->right) st[top++] = cur->right; /* push right first...            */
+        if (cur->left) st[top++] = cur->left;   /* ...so left is popped next      */
+    }
+    free(st);                                  /* our scratch stack; the caller owns out */
+    *returnSize = len;
+    return out;
+}
+''',
         "cpp": r'''
 vector<long long> preorderTraversal(TreeNode* root) {
     vector<long long> out;
@@ -835,6 +859,28 @@ def postorder_traversal(root):
     return out
 ''',
     refs={
+        "c": r'''
+/* Recursive postorder: children first, then the node itself.
+ * The output grows like a vector (double the capacity when full). */
+static void walk(struct TreeNode* n, long long** out, int* len, int* cap) {
+    if (!n) return;
+    walk(n->left, out, len, cap);
+    walk(n->right, out, len, cap);
+    if (*len == *cap) {
+        *cap *= 2;
+        *out = realloc(*out, sizeof(long long) * (size_t)*cap);
+    }
+    (*out)[(*len)++] = n->val;                 /* both subtrees done: record node */
+}
+
+long long* postorder_traversal(struct TreeNode* root, int* returnSize) {
+    int cap = 16, len = 0;
+    long long* out = malloc(sizeof(long long) * (size_t)cap);
+    walk(root, &out, &len, &cap);
+    *returnSize = len;                         /* the caller needs the length */
+    return out;
+}
+''',
         "cpp": r'''
 static void go(TreeNode* n, vector<long long>& out) {
     if (!n) return;
@@ -961,6 +1007,37 @@ def level_order(root):
     return result
 ''',
     refs={
+        "c": r'''
+static int count(struct TreeNode* n) {
+    return n ? 1 + count(n->left) + count(n->right) : 0;
+}
+
+long long** level_order(struct TreeNode* root, int* returnSize, int** returnColumnSizes) {
+    int n = count(root);
+    int cap = n ? n : 1;                       /* at most n levels, n queue slots */
+    long long** res = malloc(sizeof(long long*) * (size_t)cap);
+    *returnColumnSizes = malloc(sizeof(int) * (size_t)cap);
+    struct TreeNode** q = malloc(sizeof(struct TreeNode*) * (size_t)cap);
+    int head = 0, tail = 0, levels = 0;        /* every node enters the queue once,  */
+    if (root) q[tail++] = root;                /* so a flat array works as a queue  */
+    while (head < tail) {
+        int sz = tail - head;                  /* everything queued now = one level */
+        long long* row = malloc(sizeof(long long) * (size_t)sz);
+        for (int i = 0; i < sz; i++) {
+            struct TreeNode* cur = q[head++];
+            row[i] = cur->val;
+            if (cur->left) q[tail++] = cur->left;    /* next level, left to right */
+            if (cur->right) q[tail++] = cur->right;
+        }
+        res[levels] = row;
+        (*returnColumnSizes)[levels] = sz;     /* each row's length, for the caller */
+        levels++;
+    }
+    free(q);
+    *returnSize = levels;
+    return res;
+}
+''',
         "cpp": r'''
 vector<vector<long long>> levelOrder(TreeNode* root) {
     vector<vector<long long>> res;
@@ -1695,6 +1772,23 @@ def diameter_of_binary_tree(root):
     return best
 ''',
     refs={
+        "c": r'''
+/* Returns the height (in nodes) of the subtree at n, and updates *best with
+ * the longest path (in edges) that bends at n: left height + right height. */
+static long long height_and_best(struct TreeNode* n, long long* best) {
+    if (!n) return 0;
+    long long l = height_and_best(n->left, best);
+    long long r = height_and_best(n->right, best);
+    if (l + r > *best) *best = l + r;          /* path through n */
+    return 1 + (l > r ? l : r);                /* height reported to the parent */
+}
+
+long long diameter_of_binary_tree(struct TreeNode* root) {
+    long long best = 0;
+    height_and_best(root, &best);
+    return best;
+}
+''',
         "cpp": r'''
 static long long heightAndBest(TreeNode* n, long long& best) {
     if (!n) return 0;
@@ -2197,6 +2291,21 @@ def is_valid_bst(root):
     return ok(root, None, None)
 ''',
     refs={
+        "c": r'''
+/* Bounds are passed as pointers to ancestor nodes; NULL means "unbounded".
+ * Values can be as large as 2^50, so no numeric sentinel is ever needed. */
+static bool ok(struct TreeNode* n, struct TreeNode* lo, struct TreeNode* hi) {
+    if (!n) return true;
+    if (lo && n->val <= lo->val) return false; /* must be strictly greater */
+    if (hi && n->val >= hi->val) return false; /* and strictly smaller     */
+    /* going left tightens the upper bound to n; going right, the lower one */
+    return ok(n->left, lo, n) && ok(n->right, n, hi);
+}
+
+bool is_valid_bst(struct TreeNode* root) {
+    return ok(root, NULL, NULL);
+}
+''',
         "cpp": r'''
 // Bounds are passed as pointers to nodes; nullptr means "unbounded",
 // so no numeric sentinel can ever collide with a real value.
@@ -2336,6 +2445,23 @@ def kth_smallest(root, k):
     return -1  # unreachable for valid k
 ''',
     refs={
+        "c": r'''
+/* Inorder walk of a BST visits values in increasing order, so the k-th
+ * node we visit is the answer. *k counts down; we stop as soon as it hits 0. */
+static void walk(struct TreeNode* n, long long* k, long long* ans) {
+    if (!n || *k == 0) return;                 /* empty, or already found */
+    walk(n->left, k, ans);
+    if (*k == 0) return;
+    if (--(*k) == 0) { *ans = n->val; return; }
+    walk(n->right, k, ans);
+}
+
+long long kth_smallest(struct TreeNode* root, long long k) {
+    long long ans = -1;                        /* unreachable for valid k */
+    walk(root, &k, &ans);
+    return ans;
+}
+''',
         "cpp": r'''
 long long kthSmallest(TreeNode* root, long long k) {
     stack<TreeNode*> st;
@@ -2682,6 +2808,29 @@ def right_side_view(root):
     return result
 ''',
     refs={
+        "c": r'''
+/* Preorder DFS that visits the RIGHT child first: the first node we reach at
+ * each new depth is the one visible from the right. */
+static void dfs(struct TreeNode* n, int depth, long long* out, int* len) {
+    if (!n) return;
+    if (depth == *len) out[(*len)++] = n->val; /* first time at this depth */
+    dfs(n->right, depth + 1, out, len);
+    dfs(n->left, depth + 1, out, len);
+}
+
+static int count(struct TreeNode* n) {
+    return n ? 1 + count(n->left) + count(n->right) : 0;
+}
+
+long long* right_side_view(struct TreeNode* root, int* returnSize) {
+    int n = count(root);                       /* depth ≤ node count */
+    long long* out = malloc(sizeof(long long) * (size_t)(n ? n : 1));
+    int len = 0;
+    dfs(root, 0, out, &len);
+    *returnSize = len;
+    return out;
+}
+''',
         "cpp": r'''
 vector<long long> rightSideView(TreeNode* root) {
     vector<long long> res;

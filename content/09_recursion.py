@@ -951,6 +951,34 @@ existing subset with that number added. Or loop a bitmask `m` from 0 to 2ⁿ −
     return res
 ''',
     refs={
+        "c": r"""// Include/exclude backtracking. `path` is one shared buffer: path[0..len) is the subset
+// being built. Reaching i == n means every element has been decided, so copy it out.
+static void go(const long long* nums, int n, int i, long long* path, int len,
+               long long** res, int* cols, int* count) {
+    if (i == n) {
+        res[*count] = malloc((len ? len : 1) * sizeof(long long));
+        memcpy(res[*count], path, len * sizeof(long long));   // snapshot: path will change
+        cols[(*count)++] = len;
+        return;
+    }
+    path[len] = nums[i];                             // choose nums[i]
+    go(nums, n, i + 1, path, len + 1, res, cols, count);
+    // un-choose is free: passing `len` (not len + 1) simply ignores path[len]
+    go(nums, n, i + 1, path, len, res, cols, count); // skip nums[i]
+}
+
+long long** subsets(long long* nums, int numsSize, int* returnSize, int** returnColumnSizes) {
+    int total = 1 << numsSize;                       // exactly 2^n subsets: allocate once
+    long long** res = malloc(total * sizeof(long long*));
+    int* cols = malloc(total * sizeof(int));
+    long long* path = malloc((numsSize ? numsSize : 1) * sizeof(long long));
+    *returnSize = 0;
+    go(nums, numsSize, 0, path, 0, res, cols, returnSize);
+    free(path);
+    *returnColumnSizes = cols;
+    return res;
+}
+""",
         "cpp": r"""// Include/exclude backtracking. `path` and `res` are shared via references.
 static void go(const vector<long long>& nums, size_t i, vector<long long>& path,
                vector<vector<long long>>& res) {
@@ -1105,6 +1133,36 @@ permutations is only feasible for small n, which is why the constraint is n ≤ 
     return res
 ''',
     refs={
+        "c": r"""static void swap_ll(long long* a, long long* b) { long long t = *a; *a = *b; *b = t; }
+
+// Swap-based backtracking: positions [0, k) are fixed; [k, n) are the unused elements.
+static void go(long long* a, int n, int k, long long** res, int* count) {
+    if (k == n) {
+        res[*count] = malloc((n ? n : 1) * sizeof(long long));
+        memcpy(res[(*count)++], a, n * sizeof(long long));   // copy: `a` keeps changing
+        return;
+    }
+    for (int j = k; j < n; j++) {
+        swap_ll(&a[k], &a[j]);     // choose a[j] for position k
+        go(a, n, k + 1, res, count);
+        swap_ll(&a[k], &a[j]);     // un-choose: restore the order for the next j
+    }
+}
+
+long long** permute(long long* nums, int numsSize, int* returnSize, int** returnColumnSizes) {
+    int total = 1;
+    for (int i = 2; i <= numsSize; i++) total *= i;          // n! rows, known up front
+    long long** res = malloc(total * sizeof(long long*));
+    long long* a = malloc((numsSize ? numsSize : 1) * sizeof(long long));
+    memcpy(a, nums, numsSize * sizeof(long long));           // leave the caller's array alone
+    *returnSize = 0;
+    go(a, numsSize, 0, res, returnSize);
+    free(a);
+    *returnColumnSizes = malloc(total * sizeof(int));
+    for (int i = 0; i < total; i++) (*returnColumnSizes)[i] = numsSize;
+    return res;
+}
+""",
         "cpp": r"""// Swap-based backtracking: positions [0, k) are fixed; [k, n) are the unused elements.
 static void go(vector<long long>& a, size_t k, vector<vector<long long>>& res) {
     if (k == a.size()) { res.push_back(a); return; }
@@ -1255,6 +1313,35 @@ branches that can never reach size k (e.g. starting with `x = n` when `k = 5`).
     return res
 ''',
     refs={
+        "c": r"""// path[0..len) holds the numbers chosen so far, in increasing order.
+static void go(int n, int k, int start, long long* path, int len, long long** res, int* count) {
+    if (len == k) {
+        res[*count] = malloc((k ? k : 1) * sizeof(long long));
+        memcpy(res[(*count)++], path, k * sizeof(long long));
+        return;
+    }
+    int need = k - len;
+    // Pruned upper bound: we still need `need` numbers, so x can go up to n - need + 1.
+    for (int x = start; x <= n - need + 1; x++) {
+        path[len] = x;                                   // choose (overwrites the last try)
+        go(n, k, x + 1, path, len + 1, res, count);      // explore strictly larger numbers
+    }
+}
+
+long long** combine(long long n, long long k, int* returnSize, int** returnColumnSizes) {
+    // C(n, k) computed incrementally; each step's product divides exactly.
+    long long total = 1;
+    for (long long i = 1; i <= k; i++) total = total * (n - k + i) / i;
+    long long** res = malloc(total * sizeof(long long*));
+    long long* path = malloc((k ? k : 1) * sizeof(long long));
+    *returnSize = 0;
+    go((int)n, (int)k, 1, path, 0, res, returnSize);
+    free(path);
+    *returnColumnSizes = malloc(total * sizeof(int));
+    for (long long i = 0; i < total; i++) (*returnColumnSizes)[i] = (int)k;
+    return res;
+}
+""",
         "cpp": r"""static void go(int n, int k, int start, vector<long long>& path, vector<vector<long long>>& res) {
     if ((int)path.size() == k) { res.push_back(path); return; }
     int need = k - (int)path.size();
@@ -1408,6 +1495,51 @@ and path, plus the output.
     return res
 ''',
     refs={
+        "c": r"""// The number of answers isn't known in advance, so results go into a growable array.
+typedef struct { long long** rows; int* cols; int count, cap; } Out;
+
+static void emit(Out* o, const long long* path, int len) {
+    if (o->count == o->cap) {                           // double when full
+        o->cap = o->cap ? 2 * o->cap : 8;
+        o->rows = realloc(o->rows, o->cap * sizeof(long long*));
+        o->cols = realloc(o->cols, o->cap * sizeof(int));
+    }
+    o->rows[o->count] = malloc((len ? len : 1) * sizeof(long long));
+    memcpy(o->rows[o->count], path, len * sizeof(long long));
+    o->cols[o->count++] = len;
+}
+
+static int cmp_ll(const void* a, const void* b) {
+    long long x = *(const long long*)a, y = *(const long long*)b;
+    return (x > y) - (x < y);
+}
+
+static void go(const long long* c, int n, int start, long long remaining,
+               long long* path, int len, Out* o) {
+    if (remaining == 0) { emit(o, path, len); return; }
+    for (int i = start; i < n && c[i] <= remaining; i++) {   // sorted: stop at the first too-big value
+        path[len] = c[i];                                    // choose
+        go(c, n, i, remaining - c[i], path, len + 1, o);     // same i: reuse allowed
+    }
+}
+
+long long** combination_sum(long long* candidates, int candidatesSize, long long target,
+                            int* returnSize, int** returnColumnSizes) {
+    long long* c = malloc((candidatesSize ? candidatesSize : 1) * sizeof(long long));
+    memcpy(c, candidates, candidatesSize * sizeof(long long));
+    qsort(c, candidatesSize, sizeof(long long), cmp_ll);
+    // Candidates are positive, so a combination has at most target / min(c) numbers.
+    long long maxLen = candidatesSize ? target / c[0] + 1 : 1;
+    long long* path = malloc(maxLen * sizeof(long long));
+    Out o = {0};
+    go(c, candidatesSize, 0, target, path, 0, &o);
+    free(c); free(path);
+    if (!o.rows) { o.rows = malloc(sizeof(long long*)); o.cols = malloc(sizeof(int)); }
+    *returnSize = o.count;
+    *returnColumnSizes = o.cols;
+    return o.rows;
+}
+""",
         "cpp": r"""static void go(const vector<long long>& c, size_t start, long long remaining,
                vector<long long>& path, vector<vector<long long>>& res) {
     if (remaining == 0) { res.push_back(path); return; }
@@ -1746,6 +1878,40 @@ the tree has O(n · Cₙ) nodes, and each output costs O(n) to build.
     return res
 ''',
     refs={
+        "c": r"""typedef struct { char** items; int count, cap; } Out;
+
+// cur[0..len) is the prefix built so far; open/close count the brackets in it.
+static void go(int n, int open, int close, char* cur, int len, Out* o) {
+    if (len == 2 * n) {
+        if (o->count == o->cap) {
+            o->cap = o->cap ? 2 * o->cap : 8;
+            o->items = realloc(o->items, o->cap * sizeof(char*));
+        }
+        char* s = malloc(len + 1);
+        memcpy(s, cur, len);
+        s[len] = '\0';
+        o->items[o->count++] = s;
+        return;
+    }
+    if (open < n) {                 // trying '(' before ')' keeps the output sorted
+        cur[len] = '(';
+        go(n, open + 1, close, cur, len + 1, o);
+    }
+    if (close < open) {             // never close more than we've opened
+        cur[len] = ')';             // overwriting cur[len] is the "un-choose"
+        go(n, open, close + 1, cur, len + 1, o);
+    }
+}
+
+char** generate_parenthesis(long long n, int* returnSize) {
+    char* cur = malloc(2 * n + 1);
+    Out o = {0};
+    go((int)n, 0, 0, cur, 0, &o);
+    free(cur);
+    *returnSize = o.count;
+    return o.items ? o.items : malloc(sizeof(char*));
+}
+""",
         "cpp": r"""static void go(int n, int open, int close, string& cur, vector<string>& res) {
     if ((int)cur.size() == 2 * n) { res.push_back(cur); return; }
     if (open < n) {                 // '(' first keeps the output sorted
@@ -2128,6 +2294,36 @@ def exist(board, word):
     return any(dfs(r, c, 0) for r in range(rows) for c in range(cols))
 ''',
     refs={
+        "c": r"""// Marks cells as used by overwriting them with '#', then restores them on the way back.
+static bool dfs(char** g, int rows, int cols, const char* w, int r, int c) {
+    if (*w == '\0') return true;                          // matched every letter
+    if (r < 0 || c < 0 || r >= rows || c >= cols || g[r][c] != *w) return false;
+    char saved = g[r][c];
+    g[r][c] = '#';                                        // choose: cell is in use
+    bool found = dfs(g, rows, cols, w + 1, r + 1, c) || dfs(g, rows, cols, w + 1, r - 1, c) ||
+                 dfs(g, rows, cols, w + 1, r, c + 1) || dfs(g, rows, cols, w + 1, r, c - 1);
+    g[r][c] = saved;                                      // un-choose
+    return found;
+}
+
+bool exist(char** board, int boardSize, char* word) {
+    if (boardSize == 0) return *word == '\0';
+    int cols = (int)strlen(board[0]);
+    // Work on a private copy so the caller's strings are never modified.
+    char** g = malloc(boardSize * sizeof(char*));
+    for (int r = 0; r < boardSize; r++) {
+        g[r] = malloc(cols + 1);
+        memcpy(g[r], board[r], cols + 1);
+    }
+    bool found = false;
+    for (int r = 0; r < boardSize && !found; r++)
+        for (int c = 0; c < cols && !found; c++)
+            found = dfs(g, boardSize, cols, word, r, c);
+    for (int r = 0; r < boardSize; r++) free(g[r]);
+    free(g);
+    return found;
+}
+""",
         "cpp": r"""// We take `board` by reference but work on a copy so the caller's data is untouched.
 static bool dfs(vector<string>& g, const string& w, int r, int c, size_t i) {
     if (i == w.size()) return true;
@@ -2318,6 +2514,53 @@ for an O(n²) setup cost. For n ≤ 10 either is fine; for longer strings the ta
     return res
 ''',
     refs={
+        "c": r"""typedef struct { char*** rows; int* cols; int count, cap; } Out;
+
+// path[0..len) holds (start, length) of each piece; we only build strings at the leaves.
+static void emit(Out* o, const char* s, const int* pstart, const int* plen, int len) {
+    if (o->count == o->cap) {
+        o->cap = o->cap ? 2 * o->cap : 8;
+        o->rows = realloc(o->rows, o->cap * sizeof(char**));
+        o->cols = realloc(o->cols, o->cap * sizeof(int));
+    }
+    char** row = malloc((len ? len : 1) * sizeof(char*));
+    for (int i = 0; i < len; i++) {
+        row[i] = malloc(plen[i] + 1);
+        memcpy(row[i], s + pstart[i], plen[i]);
+        row[i][plen[i]] = '\0';
+    }
+    o->rows[o->count] = row;
+    o->cols[o->count++] = len;
+}
+
+// pal is an n x n table flattened row-major: pal[i * n + j] says s[i..j] is a palindrome.
+static void go(const char* s, int n, int start, const bool* pal,
+               int* pstart, int* plen, int len, Out* o) {
+    if (start == n) { emit(o, s, pstart, plen, len); return; }
+    for (int end = start; end < n; end++) {           // piece = s[start..end] inclusive
+        if (!pal[start * n + end]) continue;
+        pstart[len] = start; plen[len] = end - start + 1;   // choose
+        go(s, n, end + 1, pal, pstart, plen, len + 1, o);   // explore
+    }
+}
+
+char*** palindrome_partitions(char* s, int* returnSize, int** returnColumnSizes) {
+    int n = (int)strlen(s);
+    bool* pal = calloc((size_t)(n ? n : 1) * (n ? n : 1), sizeof(bool));
+    // Fill by decreasing i so pal[i+1][j-1] is ready when we need it.
+    for (int i = n - 1; i >= 0; i--)
+        for (int j = i; j < n; j++)
+            pal[i * n + j] = s[i] == s[j] && (j - i < 2 || pal[(i + 1) * n + (j - 1)]);
+    int* pstart = malloc((n ? n : 1) * sizeof(int));   // at most n pieces
+    int* plen = malloc((n ? n : 1) * sizeof(int));
+    Out o = {0};
+    go(s, n, 0, pal, pstart, plen, 0, &o);
+    free(pal); free(pstart); free(plen);
+    *returnSize = o.count;
+    *returnColumnSizes = o.cols;
+    return o.rows;
+}
+""",
         "cpp": r"""// pal[i][j] precomputed so every palindrome check is O(1).
 static void go(const string& s, size_t start, const vector<vector<bool>>& pal,
                vector<string>& path, vector<vector<string>>& res) {

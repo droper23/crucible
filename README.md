@@ -22,6 +22,16 @@ The local companion (`companion/server.py`) serves the site and adds:
 | ESPresso | `~/Projects/Code/Embedded/ESPresso/build/ESPresso` (or set `CRUCIBLE_ESPRESSO`) |
 | Coach | macOS with Apple Intelligence enabled (Swift helper in `companion/ai/`) |
 
+## Editor
+
+Monaco with IDE-style help in every language (Python, C, C++, Rust, ESPresso, ARM64):
+hover any library function, keyword, instruction or register for docs; completions are
+type-aware (`q.` on a `deque`, `v.` on a `Vec`, `m.` on an `unordered_map`); parameter hints
+appear as you type a call; F12/⌘-click jumps to your own functions, ⌘⇧O shows an outline;
+compiler, sanitizer and runtime errors from a run are underlined on the offending line (F8 steps
+through them). Reference data: `site/js/langdocs/<lang>.js` (schema in `SCHEMA.md`), engine in
+`site/js/ide.js`.
+
 ## Hosted copy (GitHub Pages / Vercel)
 
 `site/` is a static site. On a hosted copy, Python runs in the browser. To light up
@@ -56,6 +66,7 @@ are computed from each problem's Python reference solution.
 ```
 site/            static app (index.html, js/, css/, data/problems.json, data/cheatsheets/)
   js/harness.js  signature → starter code + test harness for every language
+  js/ide.js      hover / completion / signature help / diagnostics; data in js/langdocs/
 content/         problem sources (Python modules) + AUTHORING.md
 companion/       local runner + Apple Intelligence bridge (Swift)
 tools/           build.py (content → JSON), check.mjs (cross-language validation)

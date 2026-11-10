@@ -382,6 +382,20 @@ O(n) time, O(1) space.
     return jumps
 """,
     refs={
+        "c": r"""long long min_jumps(long long* nums, int numsSize) {
+    /* Implicit BFS: indices [.., end] are reachable with `jumps` jumps; while scanning
+     * them we track `furthest`, the frontier reachable with one more jump. */
+    long long jumps = 0, end = 0, furthest = 0;
+    /* Stop before the last index: once we stand there no further jump is needed. */
+    for (int i = 0; i + 1 < numsSize; i++) {
+        if (i + nums[i] > furthest) furthest = i + nums[i];
+        if (i == end) {                          /* current level exhausted: jump */
+            jumps++;
+            end = furthest;
+        }
+    }
+    return jumps;
+}""",
         "cpp": r"""long long minJumps(vector<long long>& nums) {
     long long jumps = 0, end = 0, furthest = 0;
     for (size_t i = 0; i + 1 < nums.size(); ++i) {
@@ -912,6 +926,33 @@ building the output list is still O(n) (unless you edit a balanced tree in place
     return out
 """,
     refs={
+        "c": r"""long long** insert_interval(long long** intervals, int intervalsSize, int* intervalsColSize,
+                            long long* new_interval, int new_intervalSize,
+                            int* returnSize, int** returnColumnSizes) {
+    (void)intervalsColSize; (void)new_intervalSize;   /* every interval has 2 numbers */
+    long long ns = new_interval[0], ne = new_interval[1];
+    /* At most intervalsSize + 1 rows come out. */
+    long long** out = malloc(sizeof(long long*) * (intervalsSize + 1));
+    *returnColumnSizes = malloc(sizeof(int) * (intervalsSize + 1));
+    int k = 0, i = 0;
+/* Append a fresh malloc-ed [s, e] row: the caller frees every row. */
+#define PUSH(s, e) do { out[k] = malloc(sizeof(long long) * 2); out[k][0] = (s); \
+        out[k][1] = (e); (*returnColumnSizes)[k] = 2; k++; } while (0)
+    /* 1) Intervals ending before the new one starts are untouched. */
+    while (i < intervalsSize && intervals[i][1] < ns) { PUSH(intervals[i][0], intervals[i][1]); i++; }
+    /* 2) Every interval starting at or before the new end overlaps: absorb it. */
+    while (i < intervalsSize && intervals[i][0] <= ne) {
+        if (intervals[i][0] < ns) ns = intervals[i][0];
+        if (intervals[i][1] > ne) ne = intervals[i][1];
+        i++;
+    }
+    PUSH(ns, ne);
+    /* 3) The rest start after the merged interval: copy them unchanged. */
+    while (i < intervalsSize) { PUSH(intervals[i][0], intervals[i][1]); i++; }
+#undef PUSH
+    *returnSize = k;
+    return out;
+}""",
         "cpp": r"""vector<vector<long long>> insertInterval(vector<vector<long long>>& intervals, vector<long long>& newInterval) {
     long long ns = newInterval[0], ne = newInterval[1];
     vector<vector<long long>> out;
@@ -1067,6 +1108,23 @@ O(n log n) for sorting, O(n) for the scan, O(1) extra (beyond the sort).
     return removed
 """,
     refs={
+        "c": r"""/* qsort comparator on the row pointers: order intervals by END. */
+static int cmp_end(const void* a, const void* b) {
+    long long x = (*(long long* const*)a)[1], y = (*(long long* const*)b)[1];
+    return (x > y) - (x < y);                    /* no subtraction: avoids overflow */
+}
+
+long long erase_overlap_intervals(long long** intervals, int intervalsSize, int* intervalsColSize) {
+    (void)intervalsColSize;
+    /* Greedy: keeping the interval that ends earliest leaves the most room for the rest. */
+    qsort(intervals, intervalsSize, sizeof(long long*), cmp_end);
+    long long removed = 0, lastEnd = LLONG_MIN;
+    for (int i = 0; i < intervalsSize; i++) {
+        if (intervals[i][0] >= lastEnd) lastEnd = intervals[i][1];   /* fits: keep it */
+        else removed++;                          /* overlaps the last kept one: drop it */
+    }
+    return removed;
+}""",
         "cpp": r"""long long eraseOverlapIntervals(vector<vector<long long>>& intervals) {
     sort(intervals.begin(), intervals.end(),
          [](const vector<long long>& a, const vector<long long>& b) { return a[1] < b[1]; });
@@ -1243,6 +1301,34 @@ O(n log n) for sorting (or heap operations), O(n) extra space for the two arrays
     return rooms
 """,
     refs={
+        "c": r"""static int cmp_ll(const void* a, const void* b) {
+    long long x = *(const long long*)a, y = *(const long long*)b;
+    return (x > y) - (x < y);
+}
+
+long long min_meeting_rooms(long long** intervals, int intervalsSize, int* intervalsColSize) {
+    (void)intervalsColSize;
+    /* Two-pointer sweep: only the multiset of start times and of end times matters. */
+    long long* starts = malloc(sizeof(long long) * (intervalsSize + 1));
+    long long* ends = malloc(sizeof(long long) * (intervalsSize + 1));
+    for (int i = 0; i < intervalsSize; i++) {
+        starts[i] = intervals[i][0];
+        ends[i] = intervals[i][1];
+    }
+    qsort(starts, intervalsSize, sizeof(long long), cmp_ll);
+    qsort(ends, intervalsSize, sizeof(long long), cmp_ll);
+    long long active = 0, rooms = 0;
+    int j = 0;
+    for (int i = 0; i < intervalsSize; i++) {
+        /* Free every room whose meeting ended by now; end == start may reuse the room. */
+        while (j < intervalsSize && ends[j] <= starts[i]) { active--; j++; }
+        active++;                                /* this meeting takes a room */
+        if (active > rooms) rooms = active;
+    }
+    free(starts);
+    free(ends);
+    return rooms;
+}""",
         "cpp": r"""long long minMeetingRooms(vector<vector<long long>>& intervals) {
     // Min-heap of end times of the rooms currently in use.
     sort(intervals.begin(), intervals.end());
@@ -1917,6 +2003,17 @@ O(len(tasks)) to count, O(26) for the rest. O(26) space.
     return max(len(tasks), framed)
 """,
     refs={
+        "c": r"""long long least_interval(char* tasks, long long n) {
+    long long cnt[26] = {0}, total = 0;
+    for (const char* c = tasks; *c; c++) { cnt[*c - 'A']++; total++; }
+    long long f = 0, k = 0;
+    for (int i = 0; i < 26; i++) if (cnt[i] > f) f = cnt[i];    /* bottleneck frequency */
+    for (int i = 0; i < 26; i++) if (cnt[i] == f) k++;          /* types tied at f */
+    /* f - 1 full frames of width n + 1, plus a last frame with the k tied types. */
+    long long framed = (f - 1) * (n + 1) + k;
+    /* With more tasks than slots the frames stretch and no idling is needed. */
+    return total > framed ? total : framed;
+}""",
         "cpp": r"""long long leastInterval(string tasks, long long n) {
     array<long long, 26> cnt{};
     for (char c : tasks) cnt[c - 'A']++;

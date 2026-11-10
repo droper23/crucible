@@ -330,6 +330,9 @@ body.resizing, body.resizing * { user-select: none !important; cursor: inherit; 
 .editor-host { flex: 1; min-height: 0; position: relative; }
 .editor-host .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 .saved-ind { font-size: 11.5px; color: var(--muted); }
+.cursor-pos { font: 11.5px 'JetBrains Mono', ui-monospace, monospace; color: var(--muted); margin-right: 6px; cursor: help; white-space: nowrap; }
+.cursor-pos .diag-count { color: var(--bad); }
+@media (max-width: 640px) { .cursor-pos { display: none; } }
 
 .console-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--bg-2); flex: none; }
 .console-bar .tabs { border: 0; padding: 0; background: none; }

@@ -1,4 +1,5 @@
 // Monaco editor bootstrap plus ESPresso and ARM64 syntax highlighting.
+import { installIde } from './ide.js';
 const MONACO = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min';
 let monacoP = null;
 
@@ -14,6 +15,7 @@ export function loadMonaco() {
       const m = window.monaco;
       registerLanguages(m);
       defineThemes(m);
+      installIde(m);
       resolve(m);
     }, reject);
   });
@@ -160,8 +162,20 @@ export async function createEditor(host, { value, language, onChange, onRun, onS
     tabSize: 4,
     bracketPairColorization: { enabled: true },
     guides: { indentation: true },
-    stickyScroll: { enabled: false },
+    stickyScroll: { enabled: true, maxLineCount: 3 },
     fixedOverflowWidgets: true,
+    hover: { enabled: true, delay: 350, sticky: true },
+    parameterHints: { enabled: true, cycle: true },
+    quickSuggestions: { other: true, comments: false, strings: false },
+    suggestOnTriggerCharacters: true,
+    suggest: { showStatusBar: true, preview: true, snippetsPreventQuickSuggestions: false, insertMode: 'replace' },
+    wordBasedSuggestions: 'off',
+    tabCompletion: 'on',
+    occurrencesHighlight: 'singleFile',
+    renderWhitespace: 'selection',
+    'semanticHighlighting.enabled': false,
+    linkedEditing: true,
+    inlayHints: { enabled: 'on' },
   });
   editor.onDidChangeModelContent(() => onChange?.(editor.getValue()));
   editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Quote, () => onRun?.());

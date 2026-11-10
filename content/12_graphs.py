@@ -262,6 +262,41 @@ def num_islands(grid):
     return count
 ''',
     refs={
+        "c": r'''
+/* The grid arrives as rows of '0'/'1' characters. We copy it so sinking land
+ * ('1' -> '0') never mutates the caller's strings, then flood each new island
+ * with an explicit stack (no recursion depth worries on a 120x120 grid). */
+long long num_islands(char** grid, int gridSize) {
+    int rows = gridSize, cols = (int)strlen(grid[0]);
+    char* g = malloc((size_t)rows * cols);                 /* flat copy: g[r*cols+c] */
+    for (int r = 0; r < rows; r++) memcpy(g + (size_t)r * cols, grid[r], (size_t)cols);
+    int* stack = malloc(sizeof(int) * (size_t)rows * cols); /* each cell pushed at most once */
+    static const int DR[4] = {1, -1, 0, 0}, DC[4] = {0, 0, 1, -1};
+    long long count = 0;
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            if (g[r * cols + c] != '1') continue;
+            count++;                                       /* unseen land = new island */
+            g[r * cols + c] = '0';                         /* sink BEFORE pushing      */
+            int top = 0;
+            stack[top++] = r * cols + c;
+            while (top > 0) {
+                int cell = stack[--top], cr = cell / cols, cc = cell % cols;
+                for (int d = 0; d < 4; d++) {
+                    int nr = cr + DR[d], nc = cc + DC[d];
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && g[nr * cols + nc] == '1') {
+                        g[nr * cols + nc] = '0';
+                        stack[top++] = nr * cols + nc;
+                    }
+                }
+            }
+        }
+    }
+    free(stack);
+    free(g);
+    return count;
+}
+''',
         "cpp": r'''
 long long numIslands(vector<string>& grid) {
     int R = grid.size(), C = grid[0].size();
@@ -416,6 +451,39 @@ def flood_fill(image, sr, sc, color):
     return image
 ''',
     refs={
+        "c": r'''
+/* BFS from (sr, sc), recolouring cells as they are enqueued. The result is the
+ * image itself (modified in place), so we report its shape back to the caller. */
+long long** flood_fill(long long** image, int imageSize, int* imageColSize,
+                       long long sr, long long sc, long long color,
+                       int* returnSize, int** returnColumnSizes) {
+    int rows = imageSize, cols = imageColSize[0];
+    *returnSize = rows;
+    *returnColumnSizes = malloc(sizeof(int) * (size_t)rows);
+    for (int r = 0; r < rows; r++) (*returnColumnSizes)[r] = cols;
+
+    long long old = image[sr][sc];
+    if (old == color) return image;            /* else we'd loop forever re-adding cells */
+
+    int* q = malloc(sizeof(int) * (size_t)rows * cols);   /* each cell enqueued once */
+    int head = 0, tail = 0;
+    image[sr][sc] = color;                     /* colour on enqueue = "visited" mark */
+    q[tail++] = (int)(sr * cols + sc);
+    static const int DR[4] = {1, -1, 0, 0}, DC[4] = {0, 0, 1, -1};
+    while (head < tail) {
+        int cell = q[head++], r = cell / cols, c = cell % cols;
+        for (int d = 0; d < 4; d++) {
+            int nr = r + DR[d], nc = c + DC[d];
+            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && image[nr][nc] == old) {
+                image[nr][nc] = color;
+                q[tail++] = nr * cols + nc;
+            }
+        }
+    }
+    free(q);
+    return image;
+}
+''',
         "cpp": r'''
 vector<vector<long long>> floodFill(vector<vector<long long>>& image, long long sr, long long sc, long long color) {
     long long old = image[sr][sc];
@@ -565,6 +633,27 @@ def max_area_of_island(grid):
     return best
 ''',
     refs={
+        "c": r'''
+/* Recursive flood fill that returns the island's size. Sinking a cell (1 -> 0)
+ * before recursing marks it visited, so every land cell is counted once. */
+static long long area(long long** g, int rows, int cols, int r, int c) {
+    if (r < 0 || r >= rows || c < 0 || c >= cols || g[r][c] == 0) return 0;
+    g[r][c] = 0;
+    return 1 + area(g, rows, cols, r + 1, c) + area(g, rows, cols, r - 1, c)
+             + area(g, rows, cols, r, c + 1) + area(g, rows, cols, r, c - 1);
+}
+
+long long max_area_of_island(long long** grid, int gridSize, int* gridColSize) {
+    int rows = gridSize, cols = gridColSize[0];
+    long long best = 0;
+    for (int r = 0; r < rows; r++)
+        for (int c = 0; c < cols; c++) {
+            long long a = area(grid, rows, cols, r, c);   /* 0 for water / visited */
+            if (a > best) best = a;
+        }
+    return best;
+}
+''',
         "cpp": r'''
 static long long areaFrom(vector<vector<long long>>& g, int r, int c) {
     if (r < 0 || r >= (int)g.size() || c < 0 || c >= (int)g[0].size() || g[r][c] == 0) return 0;
@@ -725,6 +814,39 @@ def oranges_rotting(grid):
     return minutes if fresh == 0 else -1
 ''',
     refs={
+        "c": r'''
+/* Multi-source BFS: every rotten orange starts in the queue at minute 0.
+ * Processing the queue one whole layer at a time = one minute of spreading. */
+long long oranges_rotting(long long** grid, int gridSize, int* gridColSize) {
+    int rows = gridSize, cols = gridColSize[0];
+    int* q = malloc(sizeof(int) * (size_t)rows * cols);   /* each cell enqueued once */
+    int head = 0, tail = 0, fresh = 0;
+    for (int r = 0; r < rows; r++)
+        for (int c = 0; c < cols; c++) {
+            if (grid[r][c] == 2) q[tail++] = r * cols + c;
+            else if (grid[r][c] == 1) fresh++;
+        }
+    static const int DR[4] = {1, -1, 0, 0}, DC[4] = {0, 0, 1, -1};
+    long long minutes = 0;
+    while (head < tail && fresh > 0) {
+        int layerEnd = tail;                   /* oranges rotten as of this minute */
+        while (head < layerEnd) {
+            int cell = q[head++], r = cell / cols, c = cell % cols;
+            for (int d = 0; d < 4; d++) {
+                int nr = r + DR[d], nc = c + DC[d];
+                if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && grid[nr][nc] == 1) {
+                    grid[nr][nc] = 2;          /* rot on enqueue: never counted twice */
+                    fresh--;
+                    q[tail++] = nr * cols + nc;
+                }
+            }
+        }
+        minutes++;
+    }
+    free(q);
+    return fresh == 0 ? minutes : -1;          /* some orange was unreachable */
+}
+''',
         "cpp": r'''
 long long orangesRotting(vector<vector<long long>>& grid) {
     int R = grid.size(), C = grid[0].size();
@@ -901,6 +1023,38 @@ def shortest_path_binary_matrix(grid):
     return -1
 ''',
     refs={
+        "c": r'''
+/* BFS over 8-directional moves; dist[] holds the path length (in cells) of
+ * each visited cell, and 0 means "not visited yet". */
+long long shortest_path_binary_matrix(long long** grid, int gridSize, int* gridColSize) {
+    (void)gridColSize;                         /* the grid is n x n */
+    int n = gridSize;
+    if (grid[0][0] == 1 || grid[n - 1][n - 1] == 1) return -1;
+    int* q = malloc(sizeof(int) * (size_t)n * n);
+    int* dist = calloc((size_t)n * n, sizeof(int));
+    int head = 0, tail = 0;
+    long long ans = -1;
+    dist[0] = 1;                               /* the start cell counts as length 1 */
+    q[tail++] = 0;
+    while (head < tail) {
+        int cell = q[head++], r = cell / n, c = cell % n;
+        if (r == n - 1 && c == n - 1) { ans = dist[cell]; break; }  /* BFS: first arrival is shortest */
+        for (int dr = -1; dr <= 1; dr++)
+            for (int dc = -1; dc <= 1; dc++) {
+                int nr = r + dr, nc = c + dc;
+                if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+                int nxt = nr * n + nc;
+                if (grid[nr][nc] == 0 && dist[nxt] == 0) {   /* mark on enqueue */
+                    dist[nxt] = dist[cell] + 1;
+                    q[tail++] = nxt;
+                }
+            }
+    }
+    free(q);
+    free(dist);
+    return ans;
+}
+''',
         "cpp": r'''
 long long shortestPathBinaryMatrix(vector<vector<long long>>& grid) {
     int n = grid.size();
@@ -1084,6 +1238,39 @@ def can_finish(num_courses, prerequisites):
     return taken == num_courses
 ''',
     refs={
+        "c": r'''
+/* Kahn's algorithm. The adjacency list is stored in CSR form (compressed
+ * sparse row): count out-degrees, prefix-sum them into start offsets, then
+ * fill one flat array. That's the idiomatic C replacement for vector<vector<int>>. */
+bool can_finish(long long num_courses, long long** prerequisites, int prerequisitesSize,
+                int* prerequisitesColSize) {
+    (void)prerequisitesColSize;                /* every pair has 2 entries */
+    int n = (int)num_courses, m = prerequisitesSize;
+    int* start = calloc((size_t)n + 1, sizeof(int));
+    int* indeg = calloc((size_t)n, sizeof(int));
+    int* adj = malloc(sizeof(int) * (size_t)(m ? m : 1));
+    for (int i = 0; i < m; i++) {
+        start[prerequisites[i][1] + 1]++;      /* edge b -> a ("b unlocks a") */
+        indeg[prerequisites[i][0]]++;
+    }
+    for (int v = 0; v < n; v++) start[v + 1] += start[v];
+    int* fill = malloc(sizeof(int) * (size_t)n);
+    memcpy(fill, start, sizeof(int) * (size_t)n);
+    for (int i = 0; i < m; i++) adj[fill[prerequisites[i][1]]++] = (int)prerequisites[i][0];
+
+    int* q = malloc(sizeof(int) * (size_t)n);  /* each course enqueued at most once */
+    int head = 0, tail = 0;
+    for (int v = 0; v < n; v++) if (indeg[v] == 0) q[tail++] = v;
+    while (head < tail) {
+        int b = q[head++];                     /* take course b ... */
+        for (int e = start[b]; e < start[b + 1]; e++)
+            if (--indeg[adj[e]] == 0) q[tail++] = adj[e];   /* ... unlocking others */
+    }
+    bool ok = tail == n;                       /* a cycle leaves courses never freed */
+    free(start); free(indeg); free(adj); free(fill); free(q);
+    return ok;
+}
+''',
         "cpp": r'''
 bool canFinish(long long numCourses, vector<vector<long long>>& prerequisites) {
     int n = numCourses;
@@ -1243,6 +1430,62 @@ def find_order(num_courses, prerequisites):
     return order if len(order) == num_courses else []
 ''',
     refs={
+        "c": r'''
+/* Kahn's algorithm with a min-heap instead of a queue, so whenever several
+ * courses are available we always take the smallest-numbered one (the unique,
+ * deterministic order the statement asks for). Adjacency is stored in CSR form. */
+static void heap_push(int* h, int* sz, int x) {
+    int i = (*sz)++;
+    h[i] = x;
+    while (i > 0 && h[(i - 1) / 2] > h[i]) {   /* sift up */
+        int p = (i - 1) / 2, t = h[p]; h[p] = h[i]; h[i] = t; i = p;
+    }
+}
+
+static int heap_pop(int* h, int* sz) {
+    int top = h[0];
+    h[0] = h[--(*sz)];
+    for (int i = 0;;) {                        /* sift down */
+        int l = 2 * i + 1, r = l + 1, m = i;
+        if (l < *sz && h[l] < h[m]) m = l;
+        if (r < *sz && h[r] < h[m]) m = r;
+        if (m == i) break;
+        int t = h[m]; h[m] = h[i]; h[i] = t; i = m;
+    }
+    return top;
+}
+
+long long* find_order(long long num_courses, long long** prerequisites, int prerequisitesSize,
+                      int* prerequisitesColSize, int* returnSize) {
+    (void)prerequisitesColSize;
+    int n = (int)num_courses, m = prerequisitesSize;
+    int* start = calloc((size_t)n + 1, sizeof(int));
+    int* indeg = calloc((size_t)n, sizeof(int));
+    int* adj = malloc(sizeof(int) * (size_t)(m ? m : 1));
+    for (int i = 0; i < m; i++) {
+        start[prerequisites[i][1] + 1]++;      /* edge b -> a */
+        indeg[prerequisites[i][0]]++;
+    }
+    for (int v = 0; v < n; v++) start[v + 1] += start[v];
+    int* fill = malloc(sizeof(int) * (size_t)n);
+    memcpy(fill, start, sizeof(int) * (size_t)n);
+    for (int i = 0; i < m; i++) adj[fill[prerequisites[i][1]]++] = (int)prerequisites[i][0];
+
+    int* heap = malloc(sizeof(int) * (size_t)n);
+    int hs = 0, len = 0;
+    long long* order = malloc(sizeof(long long) * (size_t)n);
+    for (int v = 0; v < n; v++) if (indeg[v] == 0) heap_push(heap, &hs, v);
+    while (hs > 0) {
+        int b = heap_pop(heap, &hs);
+        order[len++] = b;
+        for (int e = start[b]; e < start[b + 1]; e++)
+            if (--indeg[adj[e]] == 0) heap_push(heap, &hs, adj[e]);
+    }
+    free(start); free(indeg); free(adj); free(fill); free(heap);
+    *returnSize = len == n ? n : 0;            /* cycle: return the empty array */
+    return order;
+}
+''',
         "cpp": r'''
 vector<long long> findOrder(long long numCourses, vector<vector<long long>>& prerequisites) {
     int n = numCourses;
@@ -1407,6 +1650,36 @@ def count_components(n, edges):
     return components
 ''',
     refs={
+        "c": r'''
+/* Union-Find with path halving and union by size. Every successful union
+ * merges two components into one, so we start at n and count down. */
+static int find(int* parent, int x) {
+    while (parent[x] != x) {
+        parent[x] = parent[parent[x]];         /* path halving: skip a level */
+        x = parent[x];
+    }
+    return x;
+}
+
+long long count_components(long long n, long long** edges, int edgesSize, int* edgesColSize) {
+    (void)edgesColSize;
+    int* parent = malloc(sizeof(int) * (size_t)n);
+    int* size = malloc(sizeof(int) * (size_t)n);
+    for (int i = 0; i < n; i++) { parent[i] = i; size[i] = 1; }
+    long long components = n;
+    for (int i = 0; i < edgesSize; i++) {
+        int ru = find(parent, (int)edges[i][0]), rv = find(parent, (int)edges[i][1]);
+        if (ru == rv) continue;                /* already connected */
+        if (size[ru] < size[rv]) { int t = ru; ru = rv; rv = t; }
+        parent[rv] = ru;                       /* hang the smaller tree under the larger */
+        size[ru] += size[rv];
+        components--;
+    }
+    free(parent);
+    free(size);
+    return components;
+}
+''',
         "cpp": r'''
 long long countComponents(long long n, vector<vector<long long>>& edges) {
     vector<int> parent(n), sz(n, 1);
@@ -1565,6 +1838,40 @@ def find_redundant_connection(edges):
     return []
 ''',
     refs={
+        "c": r'''
+/* Add edges one by one into a Union-Find. The first edge whose endpoints are
+ * already connected closes the cycle; since we scan in input order, it is the
+ * one that appears last among the cycle's edges, exactly as required. */
+static int find(int* parent, int x) {
+    while (parent[x] != x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    return x;
+}
+
+long long* find_redundant_connection(long long** edges, int edgesSize, int* edgesColSize,
+                                     int* returnSize) {
+    (void)edgesColSize;
+    int n = edgesSize;                         /* a tree plus one edge: n edges, n nodes */
+    int* parent = malloc(sizeof(int) * (size_t)(n + 1));    /* nodes are 1-based */
+    for (int i = 0; i <= n; i++) parent[i] = i;
+    long long* res = malloc(sizeof(long long) * 2);
+    *returnSize = 0;
+    for (int i = 0; i < n; i++) {
+        int ru = find(parent, (int)edges[i][0]), rv = find(parent, (int)edges[i][1]);
+        if (ru == rv) {
+            res[0] = edges[i][0];
+            res[1] = edges[i][1];
+            *returnSize = 2;
+            break;
+        }
+        parent[ru] = rv;
+    }
+    free(parent);
+    return res;
+}
+''',
         "cpp": r'''
 vector<long long> findRedundantConnection(vector<vector<long long>>& edges) {
     int n = edges.size();
@@ -1720,6 +2027,47 @@ def is_bipartite(n, edges):
     return True
 ''',
     refs={
+        "c": r'''
+/* 2-colour every component with BFS. An edge whose endpoints get the same
+ * colour means an odd cycle, so the graph is not bipartite.
+ * Undirected adjacency in CSR form: each edge is stored in both directions. */
+bool is_bipartite(long long n, long long** edges, int edgesSize, int* edgesColSize) {
+    (void)edgesColSize;
+    int N = (int)n, m = edgesSize;
+    int* start = calloc((size_t)N + 1, sizeof(int));
+    int* adj = malloc(sizeof(int) * (size_t)(2 * m + 1));
+    for (int i = 0; i < m; i++) { start[edges[i][0] + 1]++; start[edges[i][1] + 1]++; }
+    for (int v = 0; v < N; v++) start[v + 1] += start[v];
+    int* fill = malloc(sizeof(int) * (size_t)N);
+    memcpy(fill, start, sizeof(int) * (size_t)N);
+    for (int i = 0; i < m; i++) {
+        int u = (int)edges[i][0], v = (int)edges[i][1];
+        adj[fill[u]++] = v;
+        adj[fill[v]++] = u;
+    }
+
+    int* color = malloc(sizeof(int) * (size_t)N);
+    for (int v = 0; v < N; v++) color[v] = -1; /* -1 = uncoloured */
+    int* q = malloc(sizeof(int) * (size_t)N);
+    bool ok = true;
+    for (int s = 0; s < N && ok; s++) {
+        if (color[s] != -1) continue;          /* already handled with its component */
+        color[s] = 0;
+        int head = 0, tail = 0;
+        q[tail++] = s;
+        while (head < tail && ok) {
+            int u = q[head++];
+            for (int e = start[u]; e < start[u + 1]; e++) {
+                int v = adj[e];
+                if (color[v] == -1) { color[v] = 1 - color[u]; q[tail++] = v; }
+                else if (color[v] == color[u]) { ok = false; break; }   /* odd cycle */
+            }
+        }
+    }
+    free(start); free(adj); free(fill); free(color); free(q);
+    return ok;
+}
+''',
         "cpp": r'''
 bool isBipartite(long long n, vector<vector<long long>>& edges) {
     vector<vector<int>> adj(n);
@@ -1899,6 +2247,78 @@ def network_delay_time(times, n, k):
     return -1 if worst == INF else worst
 ''',
     refs={
+        "c": r'''
+/* Dijkstra from k with a binary min-heap of (distance, node) pairs and lazy
+ * deletion: stale entries (d > dist[u]) are simply skipped when popped. */
+typedef struct { long long d; int u; } Item;
+
+static void push(Item* h, int* sz, Item x) {
+    int i = (*sz)++;
+    h[i] = x;
+    while (i > 0 && h[(i - 1) / 2].d > h[i].d) {
+        int p = (i - 1) / 2; Item t = h[p]; h[p] = h[i]; h[i] = t; i = p;
+    }
+}
+
+static Item pop(Item* h, int* sz) {
+    Item top = h[0];
+    h[0] = h[--(*sz)];
+    for (int i = 0;;) {
+        int l = 2 * i + 1, r = l + 1, m = i;
+        if (l < *sz && h[l].d < h[m].d) m = l;
+        if (r < *sz && h[r].d < h[m].d) m = r;
+        if (m == i) break;
+        Item t = h[m]; h[m] = h[i]; h[i] = t; i = m;
+    }
+    return top;
+}
+
+long long network_delay_time(long long** times, int timesSize, int* timesColSize,
+                             long long n, long long k) {
+    (void)timesColSize;
+    int N = (int)n, m = timesSize;
+    /* Directed adjacency in CSR form, nodes 1..n (index 0 unused). */
+    int* start = calloc((size_t)N + 2, sizeof(int));
+    int* to = malloc(sizeof(int) * (size_t)(m ? m : 1));
+    long long* w = malloc(sizeof(long long) * (size_t)(m ? m : 1));
+    for (int i = 0; i < m; i++) start[times[i][0] + 1]++;
+    for (int v = 0; v <= N; v++) start[v + 1] += start[v];
+    int* fill = malloc(sizeof(int) * (size_t)(N + 1));
+    memcpy(fill, start, sizeof(int) * (size_t)(N + 1));
+    for (int i = 0; i < m; i++) {
+        int e = fill[times[i][0]]++;
+        to[e] = (int)times[i][1];
+        w[e] = times[i][2];
+    }
+
+    const long long INF = -1;                  /* -1 marks "unreached" (weights ≥ 0) */
+    long long* dist = malloc(sizeof(long long) * (size_t)(N + 1));
+    for (int v = 0; v <= N; v++) dist[v] = INF;
+    Item* heap = malloc(sizeof(Item) * (size_t)(m + 1));   /* ≤ 1 push per edge, + source */
+    int hs = 0;
+    dist[k] = 0;
+    push(heap, &hs, (Item){0, (int)k});
+    while (hs > 0) {
+        Item it = pop(heap, &hs);
+        if (it.d > dist[it.u]) continue;       /* stale: a shorter route was found */
+        for (int e = start[it.u]; e < start[it.u + 1]; e++) {
+            long long nd = it.d + w[e];
+            int v = to[e];
+            if (dist[v] == INF || nd < dist[v]) {   /* relax */
+                dist[v] = nd;
+                push(heap, &hs, (Item){nd, v});
+            }
+        }
+    }
+    long long worst = 0;                       /* the last node to hear the signal */
+    for (int v = 1; v <= N; v++) {
+        if (dist[v] == INF) { worst = -1; break; }
+        if (dist[v] > worst) worst = dist[v];
+    }
+    free(start); free(to); free(w); free(fill); free(dist); free(heap);
+    return worst;
+}
+''',
         "cpp": r'''
 long long networkDelayTime(vector<vector<long long>>& times, long long n, long long k) {
     vector<vector<pair<int, long long>>> adj(n + 1);
@@ -2049,6 +2469,32 @@ def find_cheapest_price(n, flights, src, dst, k):
     return -1 if best[dst] == INF else best[dst]
 ''',
     refs={
+        "c": r'''
+/* Bellman-Ford limited to k+1 rounds (k stops = at most k+1 flights).
+ * Each round relaxes from a SNAPSHOT of the previous round's costs, so a
+ * single round can never chain two flights together. */
+long long find_cheapest_price(long long n, long long** flights, int flightsSize,
+                              int* flightsColSize, long long src, long long dst, long long k) {
+    (void)flightsColSize;
+    const long long INF = LLONG_MAX;
+    long long* best = malloc(sizeof(long long) * (size_t)n);
+    long long* nxt = malloc(sizeof(long long) * (size_t)n);
+    for (int v = 0; v < n; v++) best[v] = INF;
+    best[src] = 0;
+    for (long long round = 0; round <= k; round++) {
+        memcpy(nxt, best, sizeof(long long) * (size_t)n);   /* the snapshot */
+        for (int i = 0; i < flightsSize; i++) {
+            long long u = flights[i][0], v = flights[i][1], price = flights[i][2];
+            if (best[u] != INF && best[u] + price < nxt[v]) nxt[v] = best[u] + price;
+        }
+        long long* t = best; best = nxt; nxt = t;           /* swap buffers */
+    }
+    long long ans = best[dst] == INF ? -1 : best[dst];
+    free(best);
+    free(nxt);
+    return ans;
+}
+''',
         "cpp": r'''
 long long findCheapestPrice(long long n, vector<vector<long long>>& flights, long long src, long long dst, long long k) {
     const long long INF = LLONG_MAX;
@@ -2215,6 +2661,55 @@ def ladder_length(begin_word, end_word, word_list):
     return 0
 ''',
     refs={
+        "c": r'''
+/* BFS over words. Without a hash set in C's standard library, we sort the
+ * word list once and use bsearch() to ask "is this candidate a dictionary
+ * word?" in O(L log n). A parallel `used` array plays the role of removing a
+ * word from the set once it has been enqueued. */
+static int cmp_str(const void* a, const void* b) {
+    return strcmp(*(char* const*)a, *(char* const*)b);
+}
+
+long long ladder_length(char* begin_word, char* end_word, char** word_list, int word_listSize) {
+    int n = word_listSize;
+    char** words = malloc(sizeof(char*) * (size_t)n);      /* sorted copy of the pointers */
+    memcpy(words, word_list, sizeof(char*) * (size_t)n);
+    qsort(words, (size_t)n, sizeof(char*), cmp_str);
+    char* key = end_word;
+    if (!bsearch(&key, words, (size_t)n, sizeof(char*), cmp_str)) { free(words); return 0; }
+
+    bool* used = calloc((size_t)n, sizeof(bool));
+    int* q = malloc(sizeof(int) * (size_t)(n + 1));        /* -1 stands for begin_word */
+    int* depth = malloc(sizeof(int) * (size_t)(n + 1));
+    int head = 0, tail = 0;
+    q[tail] = -1; depth[tail++] = 1;
+    size_t L = strlen(begin_word);
+    char* cand = malloc(L + 1);
+    long long ans = 0;
+    while (head < tail && ans == 0) {
+        int idx = q[head], d = depth[head++];
+        strcpy(cand, idx < 0 ? begin_word : words[idx]);
+        for (size_t i = 0; i < L && ans == 0; i++) {
+            char original = cand[i];
+            for (char c = 'a'; c <= 'z'; c++) {
+                if (c == original) continue;
+                cand[i] = c;                   /* try every one-letter change */
+                key = cand;
+                char** hit = bsearch(&key, words, (size_t)n, sizeof(char*), cmp_str);
+                if (!hit) continue;
+                int j = (int)(hit - words);
+                if (used[j]) continue;
+                if (strcmp(cand, end_word) == 0) { ans = d + 1; break; }  /* BFS: shortest */
+                used[j] = true;                /* "remove" so it's enqueued only once */
+                q[tail] = j; depth[tail++] = d + 1;
+            }
+            cand[i] = original;                /* restore before the next position */
+        }
+    }
+    free(words); free(used); free(q); free(depth); free(cand);
+    return ans;
+}
+''',
         "cpp": r'''
 long long ladderLength(string beginWord, string endWord, vector<string>& wordList) {
     unordered_set<string> remaining(wordList.begin(), wordList.end());
@@ -2377,6 +2872,57 @@ def pacific_atlantic(heights):
             if (r, c) in pacific and (r, c) in atlantic]
 ''',
     refs={
+        "c": r'''
+/* Reverse the flow: from each ocean's border, BFS "uphill" (to neighbours at
+ * least as high). Cells reached by both searches can drain into both oceans. */
+static void reach(long long** h, int rows, int cols, bool* seen, int* q, int tail) {
+    static const int DR[4] = {1, -1, 0, 0}, DC[4] = {0, 0, 1, -1};
+    int head = 0;
+    while (head < tail) {
+        int cell = q[head++], r = cell / cols, c = cell % cols;
+        for (int d = 0; d < 4; d++) {
+            int nr = r + DR[d], nc = c + DC[d];
+            if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+            int nxt = nr * cols + nc;
+            if (!seen[nxt] && h[nr][nc] >= h[r][c]) { seen[nxt] = true; q[tail++] = nxt; }
+        }
+    }
+}
+
+long long** pacific_atlantic(long long** heights, int heightsSize, int* heightsColSize,
+                             int* returnSize, int** returnColumnSizes) {
+    int rows = heightsSize, cols = heightsColSize[0], N = rows * cols;
+    bool* pac = calloc((size_t)N, sizeof(bool));
+    bool* atl = calloc((size_t)N, sizeof(bool));
+    int* q = malloc(sizeof(int) * (size_t)N);  /* each cell enqueued once per search */
+    int tail = 0;
+    for (int i = 0; i < N; i++) {              /* Pacific: top row + left column */
+        int r = i / cols, c = i % cols;
+        if (r == 0 || c == 0) { pac[i] = true; q[tail++] = i; }
+    }
+    reach(heights, rows, cols, pac, q, tail);
+    tail = 0;
+    for (int i = 0; i < N; i++) {              /* Atlantic: bottom row + right column */
+        int r = i / cols, c = i % cols;
+        if (r == rows - 1 || c == cols - 1) { atl[i] = true; q[tail++] = i; }
+    }
+    reach(heights, rows, cols, atl, q, tail);
+
+    long long** res = malloc(sizeof(long long*) * (size_t)N);
+    *returnColumnSizes = malloc(sizeof(int) * (size_t)N);
+    int cnt = 0;
+    for (int i = 0; i < N; i++) {              /* row-major scan = required order */
+        if (!pac[i] || !atl[i]) continue;
+        res[cnt] = malloc(sizeof(long long) * 2);
+        res[cnt][0] = i / cols;
+        res[cnt][1] = i % cols;
+        (*returnColumnSizes)[cnt++] = 2;
+    }
+    free(pac); free(atl); free(q);
+    *returnSize = cnt;
+    return res;
+}
+''',
         "cpp": r'''
 static vector<vector<char>> reachFrom(const vector<vector<long long>>& h, vector<pair<int, int>> starts) {
     int R = h.size(), C = h[0].size();
@@ -2580,6 +3126,48 @@ def min_spanning_tree_cost(n, edges):
     return cost if used == n - 1 else -1
 ''',
     refs={
+        "c": r'''
+/* Kruskal: sort edges by weight, then greedily keep each edge that joins two
+ * different components (tracked with Union-Find). We sort an array of edge
+ * indices so the caller's rows stay untouched. */
+static long long** g_edges;                    /* qsort has no context argument */
+
+static int by_weight(const void* a, const void* b) {
+    long long wa = g_edges[*(const int*)a][2], wb = g_edges[*(const int*)b][2];
+    return (wa > wb) - (wa < wb);              /* no subtraction: avoids overflow */
+}
+
+static int find(int* parent, int x) {
+    while (parent[x] != x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    return x;
+}
+
+long long min_spanning_tree_cost(long long n, long long** edges, int edgesSize, int* edgesColSize) {
+    (void)edgesColSize;
+    int m = edgesSize;
+    int* order = malloc(sizeof(int) * (size_t)(m ? m : 1));
+    for (int i = 0; i < m; i++) order[i] = i;
+    g_edges = edges;
+    qsort(order, (size_t)m, sizeof(int), by_weight);
+    int* parent = malloc(sizeof(int) * (size_t)n);
+    for (int i = 0; i < n; i++) parent[i] = i;
+    long long cost = 0, used = 0;
+    for (int i = 0; i < m && used < n - 1; i++) {   /* n-1 edges = spanning tree done */
+        long long* e = edges[order[i]];
+        int ru = find(parent, (int)e[0]), rv = find(parent, (int)e[1]);
+        if (ru == rv) continue;                /* would close a cycle */
+        parent[ru] = rv;
+        cost += e[2];
+        used++;
+    }
+    free(order);
+    free(parent);
+    return used == n - 1 ? cost : -1;          /* fewer edges: graph is disconnected */
+}
+''',
         "cpp": r'''
 long long minSpanningTreeCost(long long n, vector<vector<long long>>& edges) {
     // Prim's algorithm with a min-heap of (weight, vertex).
@@ -2804,6 +3392,75 @@ def critical_connections(n, connections):
     return bridges
 ''',
     refs={
+        "c": r'''
+/* Tarjan's bridge-finding: tin[u] = DFS discovery time, low[u] = earliest
+ * discovery time reachable from u's subtree using one back edge. Tree edge
+ * (u, v) is a bridge exactly when low[v] > tin[u]: v's subtree can't get back
+ * above u without it. Adjacency is stored in CSR form. */
+typedef struct {
+    int *start, *adj, *tin, *low, timer;
+    long long** out;                           /* bridges found so far */
+    int cnt;
+} Ctx;
+
+static void dfs(Ctx* g, int u, int parent) {
+    g->tin[u] = g->low[u] = g->timer++;
+    for (int e = g->start[u]; e < g->start[u + 1]; e++) {
+        int v = g->adj[e];
+        if (v == parent) continue;             /* don't reuse the edge we came in on */
+        if (g->tin[v] != -1) {                 /* back edge to an ancestor */
+            if (g->tin[v] < g->low[u]) g->low[u] = g->tin[v];
+        } else {
+            dfs(g, v, u);
+            if (g->low[v] < g->low[u]) g->low[u] = g->low[v];
+            if (g->low[v] > g->tin[u]) {
+                long long* b = malloc(sizeof(long long) * 2);
+                b[0] = u < v ? u : v;
+                b[1] = u < v ? v : u;
+                g->out[g->cnt++] = b;
+            }
+        }
+    }
+}
+
+static int cmp_pair(const void* a, const void* b) {
+    const long long *x = *(long long* const*)a, *y = *(long long* const*)b;
+    if (x[0] != y[0]) return x[0] < y[0] ? -1 : 1;
+    return (x[1] > y[1]) - (x[1] < y[1]);
+}
+
+long long** critical_connections(long long n, long long** connections, int connectionsSize,
+                                 int* connectionsColSize, int* returnSize, int** returnColumnSizes) {
+    (void)connectionsColSize;
+    int N = (int)n, m = connectionsSize;
+    Ctx g;
+    g.start = calloc((size_t)N + 1, sizeof(int));
+    g.adj = malloc(sizeof(int) * (size_t)(2 * m));
+    for (int i = 0; i < m; i++) { g.start[connections[i][0] + 1]++; g.start[connections[i][1] + 1]++; }
+    for (int v = 0; v < N; v++) g.start[v + 1] += g.start[v];
+    int* fill = malloc(sizeof(int) * (size_t)N);
+    memcpy(fill, g.start, sizeof(int) * (size_t)N);
+    for (int i = 0; i < m; i++) {
+        int a = (int)connections[i][0], b = (int)connections[i][1];
+        g.adj[fill[a]++] = b;
+        g.adj[fill[b]++] = a;
+    }
+    g.tin = malloc(sizeof(int) * (size_t)N);
+    g.low = malloc(sizeof(int) * (size_t)N);
+    for (int v = 0; v < N; v++) g.tin[v] = -1;  /* -1 = not discovered yet */
+    g.timer = 0;
+    g.out = malloc(sizeof(long long*) * (size_t)N);   /* a graph has < n bridges */
+    g.cnt = 0;
+    dfs(&g, 0, -1);                            /* connected: one DFS covers it */
+    qsort(g.out, (size_t)g.cnt, sizeof(long long*), cmp_pair);
+
+    *returnColumnSizes = malloc(sizeof(int) * (size_t)(g.cnt ? g.cnt : 1));
+    for (int i = 0; i < g.cnt; i++) (*returnColumnSizes)[i] = 2;
+    *returnSize = g.cnt;
+    free(g.start); free(g.adj); free(fill); free(g.tin); free(g.low);
+    return g.out;
+}
+''',
         "cpp": r'''
 static void bridgeDfs(int u, int parent, const vector<vector<int>>& adj, vector<int>& tin,
                       vector<int>& low, int& timer, vector<vector<long long>>& out) {

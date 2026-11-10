@@ -302,6 +302,52 @@ Trace of example 1:
     return out
 ''',
     refs={
+        "c": r"""// Arena trie: every node lives in one calloc-ed array and children are indices.
+// Index 0 is the root, and nothing ever points back at the root, so a child
+// index of 0 can safely mean "no child" (and calloc gives us that for free).
+typedef struct { int next[26]; bool end; } TrieNode;
+
+// Follow `s` from the root. Returns the node reached, or -1 if the path breaks.
+static int trie_walk(const TrieNode* t, const char* s) {
+    int cur = 0;
+    for (; *s; s++) {
+        cur = t[cur].next[*s - 'a'];
+        if (cur == 0) return -1;
+    }
+    return cur;
+}
+
+bool* trie_ops(char** ops, int opsSize, char** args, int argsSize, int* returnSize) {
+    // Worst case every inserted letter creates a node: 1 (root) + total letters.
+    // Sizing the arena up front means no realloc, so no pointers can go stale.
+    int cap = 1;
+    for (int i = 0; i < argsSize; i++) cap += (int)strlen(args[i]);
+    TrieNode* t = calloc((size_t)cap, sizeof *t);
+    int used = 1;
+
+    bool* out = malloc(sizeof(bool) * (size_t)(opsSize > 0 ? opsSize : 1));
+    for (int i = 0; i < opsSize; i++) {
+        const char* w = args[i];
+        if (strcmp(ops[i], "insert") == 0) {
+            int cur = 0;
+            for (const char* p = w; *p; p++) {
+                int c = *p - 'a';
+                if (t[cur].next[c] == 0) t[cur].next[c] = used++;   // grow a new branch
+                cur = t[cur].next[c];
+            }
+            out[i] = !t[cur].end;     // true only if this word is new
+            t[cur].end = true;
+        } else if (strcmp(ops[i], "search") == 0) {
+            int n = trie_walk(t, w);
+            out[i] = n >= 0 && t[n].end;   // the path exists AND a word ends here
+        } else {                            // "startsWith"
+            out[i] = trie_walk(t, w) >= 0;  // the path existing is enough
+        }
+    }
+    free(t);
+    *returnSize = opsSize;
+    return out;
+}""",
         "cpp": r"""class Trie {
     // Arena of nodes: children[c] is an index into `nodes` (0 = none, since root is 0
     // and nothing ever points back to the root).
@@ -542,6 +588,96 @@ e(1,3) → a(1,2) → t(1,1)               "eat" found
     return sorted(found)
 ''',
     refs={
+        "c": r"""// Trie of the words, then one DFS from every cell that walks the board and the
+// trie in lockstep. Finished branches are pruned so later searches skip them.
+typedef struct { int next[26]; int word; int kids; } WNode;   // word = index or -1
+
+typedef struct {               // everything the recursive DFS needs, in one place
+    WNode* t;
+    char* g;                   // the board as a flat char grid, R*C
+    int R, C;
+    char** words;
+    char** found;
+    int nfound;
+} Search;
+
+// Returns true when `node` has become useless (no word, no children):
+// the caller then unlinks it.
+static bool dfs(Search* S, int r, int c, int node) {
+    WNode* t = S->t;
+    if (t[node].word >= 0) {                        // a word ends here: copy it out once
+        const char* w = S->words[t[node].word];
+        size_t len = strlen(w);
+        char* copy = malloc(len + 1);
+        memcpy(copy, w, len + 1);
+        S->found[S->nfound++] = copy;
+        t[node].word = -1;
+    }
+    char saved = S->g[r * S->C + c];
+    S->g[r * S->C + c] = '#';                       // mark visited for this path
+    static const int dr[4] = {1, -1, 0, 0}, dc[4] = {0, 0, 1, -1};
+    for (int k = 0; k < 4; k++) {
+        int nr = r + dr[k], nc = c + dc[k];
+        if (nr < 0 || nr >= S->R || nc < 0 || nc >= S->C) continue;
+        char ch = S->g[nr * S->C + nc];
+        if (ch == '#') continue;
+        int child = t[node].next[ch - 'a'];
+        if (child >= 0 && dfs(S, nr, nc, child)) {
+            t[node].next[ch - 'a'] = -1;
+            t[node].kids--;
+        }
+    }
+    S->g[r * S->C + c] = saved;                     // backtrack
+    return t[node].kids == 0 && t[node].word < 0;
+}
+
+static int cmp_str(const void* a, const void* b) {
+    return strcmp(*(char* const*)a, *(char* const*)b);
+}
+
+static int new_node(WNode* t, int* used) {         // take the next arena slot
+    WNode* x = &t[*used];
+    for (int c = 0; c < 26; c++) x->next[c] = -1;
+    x->word = -1;
+    x->kids = 0;
+    return (*used)++;
+}
+
+char** find_words(char*** board, int boardSize, int* boardColSize,
+                  char** words, int wordsSize, int* returnSize) {
+    // Arena sized for the worst case (every letter a new node), so no realloc.
+    int cap = 1;
+    for (int i = 0; i < wordsSize; i++) cap += (int)strlen(words[i]);
+    WNode* t = malloc(sizeof(WNode) * (size_t)cap);
+    int used = 0;
+    new_node(t, &used);                             // root = 0
+    for (int w = 0; w < wordsSize; w++) {
+        int cur = 0;
+        for (const char* p = words[w]; *p; p++) {
+            int c = *p - 'a';
+            if (t[cur].next[c] < 0) { t[cur].next[c] = new_node(t, &used); t[cur].kids++; }
+            cur = t[cur].next[c];
+        }
+        t[cur].word = w;
+    }
+
+    int R = boardSize, C = boardColSize[0];
+    char* g = malloc((size_t)(R * C));
+    for (int i = 0; i < R; i++)
+        for (int j = 0; j < C; j++) g[i * C + j] = board[i][j][0];   // "a" -> 'a'
+
+    Search S = { t, g, R, C, words, malloc(sizeof(char*) * (size_t)(wordsSize + 1)), 0 };
+    for (int i = 0; i < R; i++)
+        for (int j = 0; j < C; j++) {
+            int c = g[i * C + j] - 'a', child = t[0].next[c];
+            if (child >= 0 && dfs(&S, i, j, child)) { t[0].next[c] = -1; t[0].kids--; }
+        }
+    free(t);
+    free(g);
+    qsort(S.found, (size_t)S.nfound, sizeof(char*), cmp_str);
+    *returnSize = S.nfound;
+    return S.found;
+}""",
         "cpp": r"""struct WNode { int next[26]; int word = -1; int kids = 0;
                 WNode() { for (int& x : next) x = -1; } };
 
@@ -810,6 +946,41 @@ sum(0,2): l=3, r=6
     return out
 ''',
     refs={
+        "c": r"""// Iterative (bottom-up) segment tree: leaves live at t[n .. 2n-1] and the
+// parent of node i is i/2, so t[i] = t[2i] + t[2i+1]. No recursion, 2n longs.
+long long* range_sum_queries(long long* nums, int numsSize, char** ops, int opsSize,
+                             long long** args, int argsSize, int* argsColSize, int* returnSize) {
+    (void)argsSize; (void)argsColSize;
+    int n = numsSize;
+    long long* t = malloc(sizeof(long long) * 2 * (size_t)n);
+    for (int i = 0; i < n; i++) t[n + i] = nums[i];
+    for (int i = n - 1; i >= 1; i--) t[i] = t[2 * i] + t[2 * i + 1];   // build: O(n)
+
+    long long* out = malloc(sizeof(long long) * (size_t)(opsSize > 0 ? opsSize : 1));
+    int k = 0;
+    for (int q = 0; q < opsSize; q++) {
+        if (strcmp(ops[q], "update") == 0) {
+            // Overwrite the leaf, then refresh every ancestor on the way to the root.
+            int i = (int)args[q][0] + n;
+            t[i] = args[q][1];
+            for (i /= 2; i >= 1; i /= 2) t[i] = t[2 * i] + t[2 * i + 1];
+        } else {
+            // Half-open [l, r). Climb both borders: a border node that is a right
+            // child (l odd) or whose left neighbour is wanted (r odd) is fully
+            // inside the range, so take it and step inward. O(log n).
+            long long s = 0;
+            int l = (int)args[q][0] + n, r = (int)args[q][1] + n + 1;
+            for (; l < r; l /= 2, r /= 2) {
+                if (l & 1) s += t[l++];
+                if (r & 1) s += t[--r];
+            }
+            out[k++] = s;
+        }
+    }
+    free(t);
+    *returnSize = k;
+    return out;
+}""",
         "cpp": r"""// Classic recursive segment tree (4n nodes), node 1 covers [0, n-1].
 struct SegTree {
     int n; vector<long long> t;
@@ -1017,6 +1188,44 @@ Answer `[2, 1, 1, 0]`.
     return out
 ''',
     refs={
+        "c": r"""static int cmp_ll(const void* a, const void* b) {
+    long long x = *(const long long*)a, y = *(const long long*)b;
+    return (x > y) - (x < y);              // never "return x - y": it can overflow
+}
+
+long long* count_smaller(long long* nums, int numsSize, int* returnSize) {
+    int n = numsSize;
+    // 1. Coordinate compression: sort a copy, drop duplicates. Value v then has
+    //    rank (its index in `vals`) + 1, in 1..m: Fenwick trees are 1-indexed.
+    long long* vals = malloc(sizeof(long long) * (size_t)n);
+    memcpy(vals, nums, sizeof(long long) * (size_t)n);
+    qsort(vals, (size_t)n, sizeof(long long), cmp_ll);
+    int m = 0;
+    for (int i = 0; i < n; i++)
+        if (m == 0 || vals[m - 1] != vals[i]) vals[m++] = vals[i];
+
+    // 2. bit[] counts how many values of each rank we've seen so far.
+    int* bit = calloc((size_t)m + 1, sizeof(int));
+    long long* out = malloc(sizeof(long long) * (size_t)n);
+
+    // 3. Walk right to left: everything already in the tree is to our right.
+    for (int i = n - 1; i >= 0; i--) {
+        int lo = 0, hi = m;                   // binary search for the rank
+        while (lo < hi) {
+            int mid = (lo + hi) / 2;
+            if (vals[mid] < nums[i]) lo = mid + 1; else hi = mid;
+        }
+        int r = lo + 1;
+        int s = 0;                            // prefix(r - 1): strictly smaller ranks
+        for (int j = r - 1; j > 0; j -= j & -j) s += bit[j];
+        out[i] = s;
+        for (int j = r; j <= m; j += j & -j) bit[j]++;   // add this value
+    }
+    free(vals);
+    free(bit);
+    *returnSize = n;
+    return out;
+}""",
         "cpp": r"""vector<long long> countSmaller(vector<long long>& nums) {
     // Compress values to ranks 1..m.
     vector<long long> vals(nums);
@@ -1195,6 +1404,34 @@ Trace: text `abababcab`, pattern `ab` (`fail = [0, 0]`):
     return out
 ''',
     refs={
+        "c": r"""long long* find_all_occurrences(char* text, char* pattern, int* returnSize) {
+    int n = (int)strlen(text), m = (int)strlen(pattern);
+    // fail[i] = length of the longest proper prefix of pattern[0..i] that is
+    // also a suffix of it: where to resume after a mismatch.
+    int* fail = malloc(sizeof(int) * (size_t)m);
+    fail[0] = 0;
+    for (int i = 1, k = 0; i < m; i++) {
+        while (k > 0 && pattern[i] != pattern[k]) k = fail[k - 1];
+        if (pattern[i] == pattern[k]) k++;
+        fail[i] = k;
+    }
+    // At most n - m + 1 matches; +1 keeps malloc(0) out of the picture.
+    long long* out = malloc(sizeof(long long) * (size_t)(n + 1));
+    int cnt = 0;
+    // k = how many pattern characters currently match. It never moves backwards
+    // in the text, so the scan is O(n + m) in total.
+    for (int i = 0, k = 0; i < n; i++) {
+        while (k > 0 && text[i] != pattern[k]) k = fail[k - 1];
+        if (text[i] == pattern[k]) k++;
+        if (k == m) {
+            out[cnt++] = i - m + 1;
+            k = fail[k - 1];          // keep the overlap: allows "aa" in "aaaa" 3 times
+        }
+    }
+    free(fail);
+    *returnSize = cnt;
+    return out;
+}""",
         "cpp": r"""vector<long long> findAllOccurrences(string text, string pattern) {
     int m = pattern.size(), n = text.size();
     vector<int> fail(m, 0);
@@ -1359,6 +1596,35 @@ and 10× more memory. With window length L in general, rolling saves a factor L.
     return sorted(repeated)
 ''',
     refs={
+        "c": r"""static int cmp_str(const void* a, const void* b) {
+    return strcmp(*(char* const*)a, *(char* const*)b);
+}
+
+char** find_repeated_dna(char* s, int* returnSize) {
+    enum { L = 10, MASK = (1 << 20) - 1 };   // 10 letters x 2 bits = 20-bit key
+    int n = (int)strlen(s);
+    // Direct-address table indexed by the 20-bit code: 1 MiB of byte counters.
+    // The "hash" is exact (a perfect encoding), so there are no collisions to check.
+    unsigned char* seen = calloc(1u << 20, 1);
+    char** out = malloc(sizeof(char*) * (size_t)(n + 1));
+    int cnt = 0;
+    unsigned h = 0;
+    for (int i = 0; i < n; i++) {
+        unsigned code = s[i] == 'A' ? 0 : s[i] == 'C' ? 1 : s[i] == 'G' ? 2 : 3;
+        h = ((h << 2) | code) & MASK;          // roll: shift in 2 bits, drop the top 2
+        if (i < L - 1) continue;               // window not full yet
+        if (seen[h] < 2 && ++seen[h] == 2) {   // report exactly on the second sighting
+            char* w = malloc(L + 1);
+            memcpy(w, s + i - L + 1, L);
+            w[L] = '\0';
+            out[cnt++] = w;
+        }
+    }
+    free(seen);
+    qsort(out, (size_t)cnt, sizeof(char*), cmp_str);
+    *returnSize = cnt;
+    return out;
+}""",
         "cpp": r"""vector<string> findRepeatedDna(string s) {
     const int L = 10, MASK = (1 << 20) - 1;   // 10 letters x 2 bits
     auto code = [](char c) { return c == 'A' ? 0 : c == 'C' ? 1 : c == 'G' ? 2 : 3; };
@@ -1555,6 +1821,69 @@ answer: 2 3 7 18
     return result
 ''',
     refs={
+        "c": r"""// first index in a[0..n) with a[i] >= x (C has no std::lower_bound)
+static int lower_ll(const long long* a, int n, long long x) {
+    int lo = 0, hi = n;
+    while (lo < hi) { int m = (lo + hi) / 2; if (a[m] < x) lo = m + 1; else hi = m; }
+    return lo;
+}
+// first index in a[0..n) with a[i] > x
+static int upper_int(const int* a, int n, int x) {
+    int lo = 0, hi = n;
+    while (lo < hi) { int m = (lo + hi) / 2; if (a[m] <= x) lo = m + 1; else hi = m; }
+    return lo;
+}
+
+long long* longest_increasing_subsequence(long long* nums, int numsSize, int* returnSize) {
+    int n = numsSize;
+    // 1. L[i] = length of the longest increasing subsequence STARTING at i.
+    //    Scan right to left with patience sorting on negated values (an increasing
+    //    run read backwards is a decreasing run, i.e. increasing in -x).
+    long long* tails = malloc(sizeof(long long) * (size_t)n);
+    int* L = malloc(sizeof(int) * (size_t)n);
+    int best = 0;
+    for (int i = n - 1; i >= 0; i--) {
+        int p = lower_ll(tails, best, -nums[i]);
+        tails[p] = -nums[i];
+        if (p == best) best++;
+        L[i] = p + 1;
+    }
+
+    // 2. Bucket indices by level L (counting sort keeps them in index order).
+    //    Within one level values are non-increasing left to right (otherwise the
+    //    left one could extend the right one and would have a higher level), so
+    //    neg[] (= -value) is sorted and we can binary search it.
+    int* start = calloc((size_t)best + 2, sizeof(int));
+    for (int i = 0; i < n; i++) start[L[i] + 1]++;
+    for (int k = 1; k <= best + 1; k++) start[k] += start[k - 1];
+    int* fill = malloc(sizeof(int) * (size_t)(best + 1));
+    memcpy(fill, start, sizeof(int) * (size_t)(best + 1));
+    int* idx = malloc(sizeof(int) * (size_t)n);
+    long long* neg = malloc(sizeof(long long) * (size_t)n);
+    for (int i = 0; i < n; i++) { int p = fill[L[i]]++; idx[p] = i; neg[p] = -nums[i]; }
+
+    // 3. Greedy: for slot k (needing a level-k element), the candidates are the
+    //    level-k indices after the previous pick AND with value above it. That is
+    //    a contiguous range [lo, hi]; the smallest value sits at hi. Among equal
+    //    values take the leftmost allowed one, leaving the most room afterwards.
+    long long* res = malloc(sizeof(long long) * (size_t)best);
+    int cnt = 0, last = -1;
+    for (int k = best; k >= 1; k--) {
+        int* I = idx + start[k];
+        long long* N = neg + start[k];
+        int m = start[k + 1] - start[k];
+        int lo = upper_int(I, m, last);
+        int hi = cnt == 0 ? m - 1 : lower_ll(N, m, -res[cnt - 1]) - 1;
+        long long v = -N[hi];
+        int pos = lower_ll(N, m, -v);
+        if (pos < lo) pos = lo;
+        res[cnt++] = v;
+        last = I[pos];
+    }
+    free(tails); free(L); free(start); free(fill); free(idx); free(neg);
+    *returnSize = cnt;
+    return res;
+}""",
         "cpp": r"""vector<long long> longestIncreasingSubsequence(vector<long long>& nums) {
     int n = nums.size();
     vector<long long> tails;
@@ -1779,6 +2108,44 @@ Trace (`k = 3`) on `1 3 -1 -3 5`:
     return out
 ''',
     refs={
+        "c": r"""// Keep the current window as a SORTED array. Each slide removes one value and
+// inserts one value with memmove: O(k) per step, O(n·k) overall. That is the
+// classic embedded answer (no heaps, no allocation per step, cache-friendly),
+// and with n <= 2000 it is ~4 million moved longs in the worst case.
+
+// first index in a[0..n) with a[i] >= x
+static int lower_ll(const long long* a, int n, long long x) {
+    int lo = 0, hi = n;
+    while (lo < hi) { int m = (lo + hi) / 2; if (a[m] < x) lo = m + 1; else hi = m; }
+    return lo;
+}
+
+double* median_sliding_window(long long* nums, int numsSize, long long k, int* returnSize) {
+    int n = numsSize, K = (int)k;
+    long long* w = malloc(sizeof(long long) * (size_t)K);
+    double* out = malloc(sizeof(double) * (size_t)(n - K + 1));
+    int size = 0, cnt = 0;
+    for (int i = 0; i < n; i++) {
+        if (i >= K) {                              // evict nums[i-K]: any copy will do
+            int p = lower_ll(w, size, nums[i - K]);
+            memmove(w + p, w + p + 1, sizeof(long long) * (size_t)(size - p - 1));
+            size--;
+        }
+        int p = lower_ll(w, size, nums[i]);        // insert nums[i] in order
+        memmove(w + p + 1, w + p, sizeof(long long) * (size_t)(size - p));
+        w[p] = nums[i];
+        size++;
+        if (size == K) {
+            // Convert to double BEFORE adding: two values near 2^31 are fine in a
+            // long long, but averaging in double avoids any integer-rounding trap.
+            out[cnt++] = (K & 1) ? (double)w[K / 2]
+                                 : ((double)w[K / 2 - 1] + (double)w[K / 2]) / 2.0;
+        }
+    }
+    free(w);
+    *returnSize = cnt;
+    return out;
+}""",
         "cpp": r"""vector<double> medianSlidingWindow(vector<long long>& nums, long long k) {
     // Two ordered multisets: lo = smaller half (size ceil(k/2)), hi = larger half.
     multiset<long long> lo, hi;
@@ -1988,6 +2355,36 @@ Close the loop: `min(2 + dist[2][0], 18 + dist[1][0]) = min(3, 27) = 3`.
     return min(dp[FULL][j] + dist[j][0] for j in range(1, n))
 ''',
     refs={
+        "c": r"""// Held–Karp: dp[mask][j] = cheapest path that starts at city 0, visits exactly
+// the cities in `mask` (always including 0), and currently stands at city j.
+// Flattened into one array: dp[mask * n + j]. 2^12 * 12 longs = 384 KiB.
+long long shortest_tour(long long** dist, int distSize, int* distColSize) {
+    (void)distColSize;
+    int n = distSize;
+    if (n == 1) return 0;
+    const long long INF = LLONG_MAX / 4;          // big, but INF + cost can't overflow
+    int full = (1 << n) - 1;
+    long long* dp = malloc(sizeof(long long) * ((size_t)1 << n) * (size_t)n);
+    for (size_t i = 0; i < ((size_t)1 << n) * (size_t)n; i++) dp[i] = INF;
+    dp[1 * n + 0] = 0;                             // only city 0 visited, standing on it
+    // Masks only grow, so increasing numeric order is a valid topological order.
+    for (int mask = 1; mask <= full; mask += 2) {  // odd masks: those containing city 0
+        for (int j = 0; j < n; j++) {
+            long long cur = dp[mask * n + j];
+            if (cur >= INF) continue;
+            for (int k = 0; k < n; k++) {
+                if (mask & (1 << k)) continue;     // already visited
+                long long* slot = &dp[(mask | (1 << k)) * n + k];
+                if (cur + dist[j][k] < *slot) *slot = cur + dist[j][k];
+            }
+        }
+    }
+    long long best = INF;
+    for (int j = 1; j < n; j++)                    // close the loop back to city 0
+        if (dp[full * n + j] + dist[j][0] < best) best = dp[full * n + j] + dist[j][0];
+    free(dp);
+    return best;
+}""",
         "cpp": r"""long long shortestTour(vector<vector<long long>>& dist) {
     int n = dist.size();
     if (n == 1) return 0;
@@ -2197,6 +2594,73 @@ path [0, 1, 3, 4]
     return path
 ''',
     refs={
+        "c": r"""// Plan: run Dijkstra BACKWARDS from dst, so d[v] = shortest distance v -> dst.
+// Then walk forward from src, always taking the smallest-numbered neighbour v
+// that stays on a shortest path (w + d[v] == d[u]). Greedy on the first
+// differing node is exactly what "lexicographically smallest" asks for.
+long long* shortest_path_lex(long long n, long long** edges, int edgesSize, int* edgesColSize,
+                             long long src, long long dst, int* returnSize) {
+    (void)edgesColSize;
+    int N = (int)n, E = edgesSize;
+    // CSR (compressed sparse row) adjacency, out- and in-edges, from edge indices:
+    // count per node, prefix-sum into start offsets, then scatter.
+    int* ostart = calloc((size_t)N + 1, sizeof(int));
+    int* istart = calloc((size_t)N + 1, sizeof(int));
+    for (int e = 0; e < E; e++) { ostart[edges[e][0] + 1]++; istart[edges[e][1] + 1]++; }
+    for (int i = 0; i < N; i++) { ostart[i + 1] += ostart[i]; istart[i + 1] += istart[i]; }
+    int* oadj = malloc(sizeof(int) * (size_t)(E + 1));
+    int* iadj = malloc(sizeof(int) * (size_t)(E + 1));
+    int* ofill = malloc(sizeof(int) * (size_t)N);
+    int* ifill = malloc(sizeof(int) * (size_t)N);
+    memcpy(ofill, ostart, sizeof(int) * (size_t)N);
+    memcpy(ifill, istart, sizeof(int) * (size_t)N);
+    for (int e = 0; e < E; e++) {
+        oadj[ofill[edges[e][0]]++] = e;
+        iadj[ifill[edges[e][1]]++] = e;
+    }
+
+    // Array-based Dijkstra: O(V^2 + E). With V <= 600 that is simpler (and just as
+    // fast in practice) as a binary heap, and it needs no extra data structure.
+    const long long INF = LLONG_MAX / 4;
+    long long* d = malloc(sizeof(long long) * (size_t)N);
+    bool* done = calloc((size_t)N, sizeof(bool));
+    for (int i = 0; i < N; i++) d[i] = INF;
+    d[dst] = 0;
+    for (;;) {
+        int u = -1;
+        for (int i = 0; i < N; i++)               // closest unfinished node
+            if (!done[i] && d[i] < INF && (u < 0 || d[i] < d[u])) u = i;
+        if (u < 0) break;
+        done[u] = true;
+        for (int j = istart[u]; j < istart[u + 1]; j++) {   // relax edges INTO u
+            long long* e = edges[iadj[j]];
+            int v = (int)e[0];
+            if (d[u] + e[2] < d[v]) d[v] = d[u] + e[2];
+        }
+    }
+
+    long long* path = NULL;
+    int len = 0;
+    if (d[src] < INF) {
+        path = malloc(sizeof(long long) * (size_t)N);   // a shortest path is simple
+        int u = (int)src;
+        path[len++] = u;
+        while (u != dst) {
+            int best = INT_MAX;
+            for (int j = ostart[u]; j < ostart[u + 1]; j++) {
+                long long* e = edges[oadj[j]];
+                int v = (int)e[1];
+                if (e[2] + d[v] == d[u] && v < best) best = v;
+            }
+            u = best;                     // exists: d[u] was achieved by some edge
+            path[len++] = u;
+        }
+    }
+    free(ostart); free(istart); free(oadj); free(iadj); free(ofill); free(ifill);
+    free(d); free(done);
+    *returnSize = len;
+    return path;
+}""",
         "cpp": r"""vector<long long> shortestPathLex(long long n, vector<vector<long long>>& edges, long long src, long long dst) {
     vector<vector<pair<int, long long>>> adj(n), radj(n);
     for (auto& e : edges) { adj[e[0]].push_back({(int)e[1], e[2]}); radj[e[1]].push_back({(int)e[0], e[2]}); }
@@ -2412,6 +2876,54 @@ Trace on example 1 (edges `0→1:3, 0→2:2, 1→2:5, 1→3:2, 2→3:3`):
         flow += b
 ''',
     refs={
+        "c": r"""// Residual graph as an edge list in the classic C style: edge e and its reverse
+// are stored at e and e^1 (indices 2i and 2i+1), so "the other direction" is a
+// single XOR. head[u] / nxt[e] form a linked list of the edges leaving u.
+long long max_flow(long long n, long long** edges, int edgesSize, int* edgesColSize,
+                   long long source, long long sink) {
+    (void)edgesColSize;
+    int N = (int)n, M = 2 * edgesSize;
+    int* to = malloc(sizeof(int) * (size_t)(M + 1));
+    int* nxt = malloc(sizeof(int) * (size_t)(M + 1));
+    long long* cap = malloc(sizeof(long long) * (size_t)(M + 1));
+    int* head = malloc(sizeof(int) * (size_t)N);
+    for (int u = 0; u < N; u++) head[u] = -1;
+    for (int i = 0; i < edgesSize; i++) {
+        int u = (int)edges[i][0], v = (int)edges[i][1];
+        int e = 2 * i;
+        to[e] = v;     cap[e] = edges[i][2]; nxt[e] = head[u];     head[u] = e;
+        to[e + 1] = u; cap[e + 1] = 0;       nxt[e + 1] = head[v]; head[v] = e + 1;
+    }
+
+    int* via = malloc(sizeof(int) * (size_t)N);    // edge used to reach each node
+    int* queue = malloc(sizeof(int) * (size_t)N);
+    long long flow = 0;
+    for (;;) {
+        // BFS finds the SHORTEST augmenting path (fewest edges). That choice is
+        // what bounds Edmonds-Karp to O(V·E) augmentations.
+        for (int u = 0; u < N; u++) via[u] = -1;
+        via[source] = -2;                          // "visited, no incoming edge"
+        int qh = 0, qt = 0;
+        queue[qt++] = (int)source;
+        while (qh < qt && via[sink] == -1) {
+            int u = queue[qh++];
+            for (int e = head[u]; e != -1; e = nxt[e])
+                if (cap[e] > 0 && via[to[e]] == -1) { via[to[e]] = e; queue[qt++] = to[e]; }
+        }
+        if (via[sink] == -1) break;                // no path left: flow is maximum
+
+        long long b = LLONG_MAX;                   // bottleneck along the path
+        for (int x = (int)sink; x != source; x = to[via[x] ^ 1])
+            if (cap[via[x]] < b) b = cap[via[x]];
+        for (int x = (int)sink; x != source; x = to[via[x] ^ 1]) {
+            cap[via[x]] -= b;                      // use forward capacity
+            cap[via[x] ^ 1] += b;                  // allow undoing it later
+        }
+        flow += b;
+    }
+    free(to); free(nxt); free(cap); free(head); free(via); free(queue);
+    return flow;
+}""",
         "cpp": r"""long long maxFlow(long long n, vector<vector<long long>>& edges, long long source, long long sink) {
     vector<int> to; vector<long long> cap; vector<vector<int>> adj(n);
     for (auto& e : edges) {
@@ -2632,6 +3144,65 @@ Trace for `6, 10, 2, 6`:
     return out
 ''',
     refs={
+        "c": r"""// C has no priority_queue, so we write the one heap we need: a binary MAX-heap
+// stored in an array (children of i are 2i+1 and 2i+2).
+// The upper half needs a MIN-heap; we get one for free by storing negated values
+// in a max-heap (values fit in 32 bits, so negating a long long is safe).
+typedef struct { long long* a; int n; } Heap;
+
+static void heap_push(Heap* h, long long x) {
+    int i = h->n++;
+    h->a[i] = x;
+    while (i > 0) {                         // sift up while bigger than the parent
+        int p = (i - 1) / 2;
+        if (h->a[p] >= h->a[i]) break;
+        long long tmp = h->a[p]; h->a[p] = h->a[i]; h->a[i] = tmp;
+        i = p;
+    }
+}
+
+static long long heap_pop(Heap* h) {
+    long long top = h->a[0];
+    h->a[0] = h->a[--h->n];                 // move the last leaf to the root...
+    int i = 0;
+    for (;;) {                              // ...and sift it down
+        int l = 2 * i + 1, r = l + 1, m = i;
+        if (l < h->n && h->a[l] > h->a[m]) m = l;
+        if (r < h->n && h->a[r] > h->a[m]) m = r;
+        if (m == i) break;
+        long long tmp = h->a[m]; h->a[m] = h->a[i]; h->a[i] = tmp;
+        i = m;
+    }
+    return top;
+}
+
+double* median_finder(char** ops, int opsSize, long long* args, int argsSize, int* returnSize) {
+    (void)argsSize;
+    // lo = max-heap of the smaller half, hi = max-heap of NEGATED larger half.
+    // Invariant: lo.n == hi.n or lo.n == hi.n + 1, so the median is at the tops.
+    Heap lo = { malloc(sizeof(long long) * (size_t)opsSize), 0 };
+    Heap hi = { malloc(sizeof(long long) * (size_t)opsSize), 0 };
+    double* out = malloc(sizeof(double) * (size_t)opsSize);
+    int k = 0;
+    for (int i = 0; i < opsSize; i++) {
+        if (strcmp(ops[i], "addNum") == 0) {
+            // Route through lo so the largest of the small half moves up to hi,
+            // then rebalance sizes. Two pushes and a pop or two: O(log n).
+            heap_push(&lo, args[i]);
+            heap_push(&hi, -heap_pop(&lo));
+            if (hi.n > lo.n) heap_push(&lo, -heap_pop(&hi));
+        } else if (lo.n > hi.n) {
+            out[k++] = (double)lo.a[0];                       // odd count: middle
+        } else {
+            // Average in double: the sum of two 32-bit values could overflow an int.
+            out[k++] = ((double)lo.a[0] + (double)(-hi.a[0])) / 2.0;
+        }
+    }
+    free(lo.a);
+    free(hi.a);
+    *returnSize = k;
+    return out;
+}""",
         "cpp": r"""class MedianFinder {
     priority_queue<long long> lo;                                     // max-heap
     priority_queue<long long, vector<long long>, greater<long long>> hi;  // min-heap

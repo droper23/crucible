@@ -423,6 +423,20 @@ brings it back to O(n): a sliding-window minimum is the standard optimisation fo
     return one_back
 """,
     refs={
+        "c": r"""long long min_cost_climbing_stairs(long long* cost, int costSize) {
+    /* dp[i] = cheapest way to stand on step i (the top is step costSize).
+     * Steps 0 and 1 are free starting points, so dp[0] = dp[1] = 0.
+     * Only the last two values are ever read, so two variables suffice. */
+    long long twoBack = 0, oneBack = 0;          /* dp[i-2], dp[i-1] */
+    for (int i = 2; i <= costSize; i++) {
+        long long fromOne = oneBack + cost[i - 1];   /* pay step i-1, climb 1 */
+        long long fromTwo = twoBack + cost[i - 2];   /* pay step i-2, climb 2 */
+        long long cur = fromOne < fromTwo ? fromOne : fromTwo;
+        twoBack = oneBack;                       /* shift the window forward */
+        oneBack = cur;
+    }
+    return oneBack;                              /* dp[costSize]: the top */
+}""",
         "cpp": r"""long long minCostClimbingStairs(vector<long long>& cost) {
     int n = cost.size();
     long long twoBack = 0, oneBack = 0;      // dp[i-2], dp[i-1]
@@ -738,6 +752,26 @@ gas stations, and painting a circular fence with no two neighbours the same colo
     return max(rob_line(0, n - 2), rob_line(1, n - 1))
 """,
     refs={
+        "c": r"""/* Classic linear house robber on nums[lo..hi] (inclusive). */
+static long long rob_line(const long long* a, int lo, int hi) {
+    long long prev2 = 0, prev1 = 0;              /* best through i-2, best through i-1 */
+    for (int i = lo; i <= hi; i++) {
+        long long take = prev2 + a[i];           /* rob house i: i-1 must be skipped */
+        long long cur = take > prev1 ? take : prev1;
+        prev2 = prev1;
+        prev1 = cur;
+    }
+    return prev1;
+}
+
+long long rob_circle(long long* nums, int numsSize) {
+    if (numsSize == 1) return nums[0];           /* a lone house has no neighbours */
+    /* The first and last houses are adjacent, so at least one of them is skipped.
+     * Solve the line without the last house and the line without the first. */
+    long long a = rob_line(nums, 0, numsSize - 2);
+    long long b = rob_line(nums, 1, numsSize - 1);
+    return a > b ? a : b;
+}""",
         "cpp": r"""long long robLine(const vector<long long>& a, int lo, int hi) {
     long long prev2 = 0, prev1 = 0;            // best through i-2, i-1
     for (int i = lo; i <= hi; ++i) {
@@ -1113,6 +1147,23 @@ O(amount × len(coins)) time, O(amount) space.
     return dp[amount]
 """,
     refs={
+        "c": r"""long long count_coin_combinations(long long amount, long long* coins, int coinsSize) {
+    /* dp[a] = number of combinations (order ignored) that make amount a
+     * using the coin types processed so far. calloc zero-fills. */
+    long long* dp = calloc(amount + 1, sizeof(long long));
+    dp[0] = 1;                                   /* the empty combination */
+    /* Coin types in the OUTER loop: each combination is built in coin order,
+     * so {1,2} and {2,1} are counted once (that would be permutations otherwise). */
+    for (int i = 0; i < coinsSize; i++) {
+        long long c = coins[i];
+        /* a ascending: dp[a - c] may already include copies of c -> unlimited supply. */
+        for (long long a = c; a <= amount; a++)
+            dp[a] += dp[a - c];
+    }
+    long long ans = dp[amount];
+    free(dp);                                    /* we own the scratch table */
+    return ans;
+}""",
         "cpp": r"""long long countCoinCombinations(long long amount, vector<long long>& coins) {
     vector<long long> dp(amount + 1, 0);
     dp[0] = 1;                                // the empty combination
@@ -1256,6 +1307,18 @@ obstacles, costs, and other twists that break the formula.
     return row[n - 1]
 """,
     refs={
+        "c": r"""long long unique_paths(long long m, long long n) {
+    /* row[c] = paths to cell (r, c) of the current row. Row 0 is all ones:
+     * the only way along the top edge is straight right. */
+    long long* row = malloc(sizeof(long long) * n);
+    for (long long c = 0; c < n; c++) row[c] = 1;
+    for (long long r = 1; r < m; r++)
+        for (long long c = 1; c < n; c++)
+            row[c] += row[c - 1];                /* above (old row[c]) + left (new row[c-1]) */
+    long long ans = row[n - 1];
+    free(row);
+    return ans;
+}""",
         "cpp": r"""long long uniquePaths(long long m, long long n) {
     vector<long long> row(n, 1);            // row 0: all ones
     for (long long r = 1; r < m; ++r)
@@ -1421,6 +1484,20 @@ O(rows · cols) time. O(cols) extra space for the rolling row, O(1) for the in-p
     return row[cols - 1]
 """,
     refs={
+        "c": r"""long long unique_paths_with_obstacles(long long** grid, int gridSize, int* gridColSize) {
+    int R = gridSize, C = gridColSize[0];
+    /* One rolling row: before the update row[c] holds the count for the cell above. */
+    long long* row = calloc(C, sizeof(long long));
+    row[0] = 1;                                  /* seed the start (zeroed below if blocked) */
+    for (int r = 0; r < R; r++)
+        for (int c = 0; c < C; c++) {
+            if (grid[r][c] == 1) row[c] = 0;     /* obstacle: no path passes through */
+            else if (c > 0) row[c] += row[c - 1];/* above + left */
+        }
+    long long ans = row[C - 1];
+    free(row);
+    return ans;
+}""",
         "cpp": r"""long long uniquePathsWithObstacles(vector<vector<long long>>& grid) {
     int R = grid.size(), C = grid[0].size();
     vector<long long> row(C, 0);
@@ -1605,6 +1682,22 @@ O(rows · cols) time, O(cols) extra space (O(1) in place).
     return row[cols - 1]
 """,
     refs={
+        "c": r"""long long min_path_sum(long long** grid, int gridSize, int* gridColSize) {
+    int R = gridSize, C = gridColSize[0];
+    const long long INF = LLONG_MAX / 4;         /* "unreachable", safe to add to */
+    long long* row = malloc(sizeof(long long) * C);
+    for (int c = 0; c < C; c++) row[c] = INF;    /* nothing above row 0 */
+    row[0] = 0;                                  /* so best(0,0) = grid[0][0] */
+    for (int r = 0; r < R; r++)
+        for (int c = 0; c < C; c++) {
+            long long up = row[c];               /* still the previous row's value */
+            long long left = c > 0 ? row[c - 1] : INF;
+            row[c] = grid[r][c] + (up < left ? up : left);
+        }
+    long long ans = row[C - 1];
+    free(row);
+    return ans;
+}""",
         "cpp": r"""long long minPathSum(vector<vector<long long>>& grid) {
     int R = grid.size(), C = grid[0].size();
     const long long INF = LLONG_MAX / 4;
@@ -1802,6 +1895,27 @@ Using `bisect_right` (first `> x`) instead gives the longest **non-decreasing** 
     return max(dp)
 """,
     refs={
+        "c": r"""long long length_of_lis(long long* nums, int numsSize) {
+    /* Patience sorting, O(n log n):
+     * tails[k] = smallest possible tail of a strictly increasing subsequence of length k+1.
+     * tails is always sorted, so we can binary-search it. */
+    long long* tails = malloc(sizeof(long long) * (numsSize > 0 ? numsSize : 1));
+    int len = 0;
+    for (int i = 0; i < numsSize; i++) {
+        long long x = nums[i];
+        /* lower bound: first k with tails[k] >= x (>= keeps the sequence STRICTLY increasing) */
+        int lo = 0, hi = len;
+        while (lo < hi) {
+            int mid = lo + (hi - lo) / 2;
+            if (tails[mid] < x) lo = mid + 1;
+            else hi = mid;
+        }
+        tails[lo] = x;                           /* smaller tail for length lo+1 ... */
+        if (lo == len) len++;                    /* ... or x extends the longest one */
+    }
+    free(tails);
+    return len;
+}""",
         "cpp": r"""long long lengthOfLis(vector<long long>& nums) {
     // O(n log n) patience sorting: tails[k] = smallest tail of an increasing
     // subsequence of length k+1. lower_bound finds the first tail >= x.
@@ -2380,6 +2494,25 @@ of length ≤ L, so O(n · L²) character work. O(n + total dictionary size) spa
     return dp[n]
 """,
     refs={
+        "c": r"""bool word_break(char* s, char** words, int wordsSize) {
+    int n = strlen(s);
+    /* dp[i] = true when the prefix s[0..i) splits into dictionary words. */
+    bool* dp = calloc(n + 1, sizeof(bool));
+    dp[0] = true;                                /* the empty prefix needs no words */
+    for (int i = 1; i <= n; i++) {
+        /* Try every word as the LAST piece of the prefix s[0..i). */
+        for (int w = 0; w < wordsSize && !dp[i]; w++) {
+            int len = strlen(words[w]);
+            /* The word must fit, the part before it must be breakable, and the
+             * characters must match. strncmp compares exactly len bytes. */
+            if (len <= i && dp[i - len] && strncmp(s + i - len, words[w], len) == 0)
+                dp[i] = true;
+        }
+    }
+    bool ans = dp[n];
+    free(dp);
+    return ans;
+}""",
         "cpp": r"""bool wordBreak(string s, vector<string>& words) {
     unordered_set<string> dict(words.begin(), words.end());
     size_t longest = 0;
@@ -2553,6 +2686,25 @@ O(n · target) time = at most 200 × 10 000 = 2 · 10⁶ steps. O(target) space.
     return can[target]
 """,
     refs={
+        "c": r"""bool can_partition(long long* nums, int numsSize) {
+    long long total = 0;
+    for (int i = 0; i < numsSize; i++) total += nums[i];
+    if (total % 2 != 0) return false;            /* odd total can't split evenly */
+    long long target = total / 2;
+    /* reach[s] = some subset of the numbers seen so far sums to s. */
+    bool* reach = calloc(target + 1, sizeof(bool));
+    reach[0] = true;                             /* the empty subset */
+    for (int i = 0; i < numsSize; i++) {
+        long long x = nums[i];
+        /* s DOWNWARD: reach[s - x] is still the value from before x was considered,
+         * so each number is used at most once (0/1 knapsack). */
+        for (long long s = target; s >= x; s--)
+            if (reach[s - x]) reach[s] = true;
+    }
+    bool ans = reach[target];
+    free(reach);
+    return ans;
+}""",
         "cpp": r"""bool canPartition(vector<long long>& nums) {
     long long total = accumulate(nums.begin(), nums.end(), 0LL);
     if (total % 2) return false;
@@ -2728,6 +2880,21 @@ of bits. 0/1 knapsack is NP-hard; the DP is fast only because capacities are sma
     return dp[capacity]
 """,
     refs={
+        "c": r"""long long knapsack(long long* weights, int weightsSize, long long* values, int valuesSize,
+                   long long capacity) {
+    (void)valuesSize;                            /* same length as weights */
+    /* dp[c] = best value with total weight <= c using the items seen so far. */
+    long long* dp = calloc(capacity + 1, sizeof(long long));
+    for (int i = 0; i < weightsSize; i++) {
+        long long w = weights[i], v = values[i];
+        /* c DOWNWARD so dp[c - w] still excludes item i: each item is taken at most once. */
+        for (long long c = capacity; c >= w; c--)
+            if (dp[c - w] + v > dp[c]) dp[c] = dp[c - w] + v;
+    }
+    long long ans = dp[capacity];
+    free(dp);
+    return ans;
+}""",
         "cpp": r"""long long knapsack(vector<long long>& weights, vector<long long>& values, long long capacity) {
     vector<long long> dp(capacity + 1, 0);
     for (size_t i = 0; i < weights.size(); ++i) {
@@ -3095,6 +3262,27 @@ table, O(1) for expansion.
     return s[best_start:best_start + best_len]
 """,
     refs={
+        "c": r"""char* longest_palindrome(char* s) {
+    int n = strlen(s), bestStart = 0, bestLen = n > 0 ? 1 : 0;
+    /* Every palindrome has a centre: a character (odd length) or a gap between two
+     * characters (even length). Expand outwards from all 2n-1 centres. */
+    for (int c = 0; c < n; c++) {
+        for (int even = 0; even <= 1; even++) {
+            int lo = c, hi = c + even;
+            while (lo >= 0 && hi < n && s[lo] == s[hi]) { lo--; hi++; }
+            int len = hi - lo - 1;               /* the loop overshot by one on each side */
+            if (len > bestLen) {                 /* strictly longer: keeps the leftmost tie */
+                bestLen = len;
+                bestStart = lo + 1;
+            }
+        }
+    }
+    /* The caller frees the result, so copy into a fresh malloc-ed, NUL-terminated buffer. */
+    char* out = malloc(bestLen + 1);
+    memcpy(out, s + bestStart, bestLen);
+    out[bestLen] = '\0';
+    return out;
+}""",
         "cpp": r"""string longestPalindrome(string s) {
     int n = s.size(), bestStart = 0, bestLen = 1;
     auto expand = [&](int lo, int hi) {
@@ -3265,6 +3453,28 @@ O(rows · cols) time, O(cols) extra space (O(1) in place).
     return best * best                   # area, not side
 """,
     refs={
+        "c": r"""long long maximal_square(long long** matrix, int matrixSize, int* matrixColSize) {
+    int R = matrixSize, C = matrixColSize[0];
+    /* side[r][c] (1-based, zero border) = side of the largest all-ones square whose
+     * bottom-right corner is matrix[r-1][c-1]. Stored flat: index r * (C + 1) + c. */
+    int W = C + 1;
+    long long* side = calloc((size_t)(R + 1) * W, sizeof(long long));
+    long long best = 0;
+    for (int r = 1; r <= R; r++)
+        for (int c = 1; c <= C; c++) {
+            if (matrix[r - 1][c - 1] != 1) continue;     /* a 0 ends every square here */
+            long long up = side[(r - 1) * W + c];
+            long long left = side[r * W + c - 1];
+            long long diag = side[(r - 1) * W + c - 1];
+            long long m = up < left ? up : left;
+            if (diag < m) m = diag;
+            /* The square is limited by the weakest of its three neighbours. */
+            side[r * W + c] = m + 1;
+            if (m + 1 > best) best = m + 1;
+        }
+    free(side);
+    return best * best;                          /* area, not side */
+}""",
         "cpp": r"""long long maximalSquare(vector<vector<long long>>& matrix) {
     int R = matrix.size(), C = matrix[0].size();
     vector<vector<int>> side(R + 1, vector<int>(C + 1, 0));   // 1-based with a zero border
@@ -3464,6 +3674,32 @@ O(n³) time (≈ n³/6 inner steps, 1.7 · 10⁵ for n = 100), O(n²) space.
     return dp[0][m - 1]
 """,
     refs={
+        "c": r"""long long max_coins(long long* nums, int numsSize) {
+    /* Pad with virtual 1-balloons at both ends: a[0] = a[m-1] = 1. */
+    int m = numsSize + 2;
+    long long* a = malloc(sizeof(long long) * m);
+    a[0] = a[m - 1] = 1;
+    for (int i = 0; i < numsSize; i++) a[i + 1] = nums[i];
+    /* dp[l][r] = best coins from bursting everything strictly between l and r,
+     * with l and r still standing. Flat array: dp[l * m + r]. */
+    long long* dp = calloc((size_t)m * m, sizeof(long long));
+    /* l descending, r ascending: dp[l][k] (same row, smaller r) and dp[k][r]
+     * (a later row) are ready when dp[l][r] needs them. */
+    for (int l = m - 3; l >= 0; l--)
+        for (int r = l + 2; r < m; r++) {
+            long long best = 0;
+            for (int k = l + 1; k < r; k++) {
+                /* k is the LAST balloon burst in (l, r): its neighbours are then l and r. */
+                long long v = dp[l * m + k] + a[l] * a[k] * a[r] + dp[k * m + r];
+                if (v > best) best = v;
+            }
+            dp[l * m + r] = best;
+        }
+    long long ans = dp[0 * m + (m - 1)];
+    free(dp);
+    free(a);
+    return ans;
+}""",
         "cpp": r"""long long maxCoins(vector<long long>& nums) {
     vector<long long> a = {1};
     a.insert(a.end(), nums.begin(), nums.end());
@@ -3678,6 +3914,26 @@ O(|s| · |p|) time and space (O(|p|) with two rows). Compare with exponential ba
     return dp[0][0]
 """,
     refs={
+        "c": r"""bool is_match(char* s, char* p) {
+    int n = strlen(s), m = strlen(p);
+    /* dp[i][j] = does the suffix s[i..] match the pattern suffix p[j..]?
+     * Flat (n+1) x (m+1) table, filled from the back. */
+    int W = m + 1;
+    bool* dp = calloc((size_t)(n + 1) * W, sizeof(bool));
+    dp[n * W + m] = true;                        /* empty string matches empty pattern */
+    for (int i = n; i >= 0; i--)
+        for (int j = m - 1; j >= 0; j--) {
+            bool first = i < n && (p[j] == s[i] || p[j] == '.');
+            if (j + 1 < m && p[j + 1] == '*')
+                /* "x*": use it zero times (skip both chars) or eat one s char and stay. */
+                dp[i * W + j] = dp[i * W + j + 2] || (first && dp[(i + 1) * W + j]);
+            else
+                dp[i * W + j] = first && dp[(i + 1) * W + j + 1];
+        }
+    bool ans = dp[0];
+    free(dp);
+    return ans;
+}""",
         "cpp": r"""bool isMatch(string s, string p) {
     int n = s.size(), m = p.size();
     vector<vector<char>> dp(n + 1, vector<char>(m + 1, 0));
@@ -3871,6 +4127,20 @@ The whole "Best Time to Buy and Sell Stock" family is this state machine with tw
     return max(sold, rest, 0)
 """,
     refs={
+        "c": r"""long long max_profit_cooldown(long long* prices, int pricesSize) {
+    const long long NEG = LLONG_MIN / 4;         /* "impossible", safe to add a price to */
+    /* Three states at the end of each day:
+     *   hold = own a share, sold = sold today (cooldown tomorrow), rest = free, no share. */
+    long long hold = NEG, sold = NEG, rest = 0;
+    for (int i = 0; i < pricesSize; i++) {
+        long long p = prices[i];
+        long long h = hold, s = sold, r = rest;  /* yesterday's values */
+        hold = h > r - p ? h : r - p;            /* keep holding, or buy from rest */
+        sold = h + p;                            /* sell what we held */
+        rest = r > s ? r : s;                    /* stay idle, or finish cooldown */
+    }
+    return sold > rest ? sold : rest;            /* ending while holding is never best */
+}""",
         "cpp": r"""long long maxProfitCooldown(vector<long long>& prices) {
     const long long NEG = LLONG_MIN / 4;           // "impossible", safe to add a price to
     long long hold = NEG, sold = NEG, rest = 0;
@@ -4055,6 +4325,20 @@ O(|s| · |t|) time, O(|t|) space.
     return dp[m]
 """,
     refs={
+        "c": r"""long long num_distinct(char* s, char* t) {
+    int m = strlen(t);
+    /* dp[j] = number of ways the part of s seen so far forms t[0..j). */
+    long long* dp = calloc(m + 1, sizeof(long long));
+    dp[0] = 1;                                   /* the empty target: exactly one way */
+    for (const char* ch = s; *ch; ch++)
+        /* j DOWNWARD so dp[j - 1] is still the count BEFORE this character:
+         * each character of s is matched to at most one position of t. */
+        for (int j = m; j >= 1; j--)
+            if (t[j - 1] == *ch) dp[j] += dp[j - 1];
+    long long ans = dp[m];
+    free(dp);
+    return ans;
+}""",
         "cpp": r"""long long numDistinct(string s, string t) {
     int m = t.size();
     vector<long long> dp(m + 1, 0);

@@ -1582,6 +1582,38 @@ Dispatch each query on its first character: a digit means "number".
     return out
 ''',
     refs={
+        "c": r"""char** convert_excel(char** queries, int queriesSize, int* returnSize) {
+    char** out = malloc((queriesSize ? queriesSize : 1) * sizeof(char*));
+    for (int q = 0; q < queriesSize; q++) {
+        const char* s = queries[q];
+        if (s[0] >= '0' && s[0] <= '9') {
+            // Number -> title. Bijective base 26: digits are 1..26, so subtract 1 before
+            // each % / step to map them to 0..25. Letters come out last-first.
+            long long n = strtoll(s, NULL, 10);
+            char tmp[32];
+            int len = 0;
+            while (n > 0) {
+                n--;
+                tmp[len++] = (char)('A' + n % 26);
+                n /= 26;
+            }
+            char* t = malloc(len + 1);
+            for (int i = 0; i < len; i++) t[i] = tmp[len - 1 - i];   // reverse into place
+            t[len] = '\0';
+            out[q] = t;
+        } else {
+            // Title -> number: Horner's rule with A=1 .. Z=26.
+            long long v = 0;
+            for (const char* p = s; *p; p++) v = v * 26 + (*p - 'A' + 1);
+            char* t = malloc(24);                      // enough for any 64-bit value
+            snprintf(t, 24, "%lld", v);
+            out[q] = t;
+        }
+    }
+    *returnSize = queriesSize;
+    return out;
+}
+""",
         "cpp": r"""vector<string> convertExcel(vector<string>& queries) {
     vector<string> out;
     for (const string& q : queries) {
