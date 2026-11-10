@@ -8,7 +8,7 @@ const ty = (name, sig, doc, extra = {}) => ({ name, kind: 'type', sig, doc, ...e
 const FMT = { label: 'fmt', doc: 'string literal with `{}` (Display), `{:?}` (Debug), `{:.2}`, `{:>5}`, inline `{x}`' };
 const ARGS = { label: 'args', doc: 'values substituted into the `{}` placeholders, in order' };
 
-export default [
+const entries = [
   // ---------- keywords ----------
   kw('fn', 'fn name(arg: T) -> R { ... }', 'Declare a function. Crucible calls a `pub fn` with the exact snake_case name from the starter. The last expression (no `;`) is the return value.', 'fn ${1:name}(${2}) -> ${3:i64} {\n\t$0\n}', 'pub fn add(a: i64, b: i64) -> i64 {\n    a + b\n}'),
   kw('let', 'let [mut] name[: T] = expr;', 'Bind a variable. Bindings are immutable unless declared `mut`. Re-`let` with the same name *shadows* the old binding (can change its type).', 'let ${1:x} = ${2:value};', 'let n = nums.len();\nlet n = n as i64; // shadowing'),
@@ -52,7 +52,20 @@ export default [
   { name: 'Err', owner: 'Result', kind: 'function', sig: 'Err(error: E) -> Result<T, E>', params: [{ label: 'error', doc: 'the error value' }], returns: 'Result<T, E> — the error variant wrapping error', doc: 'Error variant of `Result`.', example: 'match "x".parse::<i64>() {\n    Ok(n) => println!("{}", n),\n    Err(e) => println!("bad: {}", e),\n}' },
 
   // ---------- macros ----------
-  mac('println!', 'println!(fmt, args...)', 'Print to stdout with newline. `{}` Display, `{:?}` Debug (Vec, Option), `{:.3}` 3 decimals, `{:>5}` right-align. Inline names: `{x}`. For lots of output, use a `BufWriter` + `writeln!` instead.', { params: [FMT, ARGS], returns: '()', insert: 'println!("{}", ${1:x});', example: 'println!("{} {:?} {:.2}", n, v, f); // 3 [1, 2] 0.50' }),
+  mac('println!', 'println!(fmt, args...)', 'Print to stdout with newline. `{}` Display, `{:?}` Debug (Vec, Option), `{:.3}` 3 decimals, `{:>5}` right-align. Inline names: `{x}`. For lots of output, use a `BufWriter` + `writeln!` instead.', { params: [FMT, ARGS], returns: '()', insert: 'println!("{}", ${1:x});', example: 'println!("{} {:?} {:.2}", n, v, f); // 3 [1, 2] 0.50', learn: {
+      summary: "print a line of formatted text",
+      what: "println! prints text to standard output followed by a newline. The ! means it is a macro (code that is expanded when compiling) rather than a normal function, but you call it the same way. The first argument must be a string literal; each {} in it is a placeholder filled by the next argument, and you can also put a variable name directly inside the braces, like {x}. {:?} prints the \"debug\" form, which works for vectors and Options.",
+      params: {
+        fmt: "a string literal with {} placeholders, e.g. \"{} + {} = {}\"",
+        "args...": "the values that fill the placeholders, in order, e.g. a, b, a + b"
+      },
+      returns: "Nothing (the unit value ()). It is used only for its output.",
+      example: "let lives = 3;                 // a value to show\nprintln!(\"lives: {}\", lives);  // lives: 3\nprintln!(\"{lives} left\");      // 3 left (variable named inside braces)\nprintln!(\"{:?}\", vec![1, 2]);  // [1, 2] (debug form)",
+      watch: [
+        "The first argument must be a literal: println!(s) with a String variable fails; write println!(\"{}\", s).",
+        "To print a literal brace, double it: {{ or }}."
+      ]
+    }  }),
   mac('print!', 'print!(fmt, args...)', 'Like `println!` without the newline. Stdout is line-buffered, so flush (`io::stdout().flush()`) if needed.', { params: [FMT, ARGS], returns: '()', insert: 'print!("{} ", ${1:x});', example: 'for x in &v { print!("{} ", x); }\nprintln!();' }),
   mac('eprintln!', 'eprintln!(fmt, args...)', 'Print to stderr: good for debugging without corrupting expected output.', { params: [FMT, ARGS], returns: '()', insert: 'eprintln!("{:?}", ${1:x});', example: 'eprintln!("dp = {:?}", dp);' }),
   mac('format!', 'format!(fmt, args...) -> String', 'Build a `String` using the same syntax as `println!`.', { params: [FMT, ARGS], returns: 'String — the formatted text', insert: 'format!("{}", ${1:x})', example: 'let s = format!("{}-{}", 3, 7); // "3-7"' }),
@@ -92,7 +105,20 @@ export default [
 
   // ---------- slice ----------
   ty('slice', '[T] / &[T] / &mut [T]', 'A view into contiguous elements (`Vec`, array). Take one with `&v[a..b]`. Pass `&[i64]` instead of `&Vec<i64>` for flexibility.', { example: 'fn total(s: &[i64]) -> i64 { s.iter().sum() }\nlet mid = total(&v[1..3]);' }),
-  m('slice', 'len', 's.len() -> usize', 'Number of elements. Returns **usize**: `s.len() - 1` panics (debug) / wraps when empty; cast to `i64` for signed math.', { returns: 'usize — number of elements', example: 'let n = v.len();\nlet last = v[n - 1]; // panics if v is empty' }),
+  m('slice', 'len', 's.len() -> usize', 'Number of elements. Returns **usize**: `s.len() - 1` panics (debug) / wraps when empty; cast to `i64` for signed math.', { returns: 'usize — number of elements', example: 'let n = v.len();\nlet last = v[n - 1]; // panics if v is empty', learn: {
+      summary: "number of elements",
+      what: "len is called with a dot on a slice, array or Vec (and also on strings) and tells you how many elements it holds. It is instant (O(1)) because the length is stored with the data. The answer is a usize, Rust's unsigned (never negative) integer type used for sizes and indexes, so the valid indexes are 0 through len() - 1.",
+      params: {
+        s: "the slice, array or vector you call it on, before the dot"
+      },
+      returns: "A usize: the number of elements. Use it for loop bounds (0..v.len()) and the last index, v.len() - 1.",
+      example: "let marks = [70, 85, 92];           // an array of 3 numbers\nprintln!(\"{}\", marks.len());        // 3\nlet last = marks[marks.len() - 1];  // 92, the last element",
+      watch: [
+        "usize can't go negative: v.len() - 1 on an empty v panics (overflow). Check v.is_empty() first.",
+        "Mixing with i32 needs a cast: i as usize, or v.len() as i32.",
+        "On a String, len() counts bytes, not characters."
+      ]
+    }  }),
   m('slice', 'is_empty', 's.is_empty() -> bool', 'True if there are no elements.', { returns: 'bool — true if len() == 0', example: 'if nums.is_empty() { return 0; }' }),
   m('slice', 'sort', 's.sort()', 'Stable sort ascending, in place. **O(n log n)**. Returns `()` (not the vector). `f64` is not `Ord`: use `sort_by(|a, b| a.partial_cmp(b).unwrap())` or `total_cmp`.', { returns: '() — sorts in place', example: 'let mut v = vec![3, 1, 2];\nv.sort(); // [1, 2, 3]' }),
   m('slice', 'sort_unstable', 's.sort_unstable()', 'Faster, non-stable in-place sort (pdqsort). Usually the best default for integers.', { returns: '() — sorts in place', example: 'let mut v = vec![5, 2, 9];\nv.sort_unstable(); // [2, 5, 9]' }),
@@ -135,16 +161,66 @@ export default [
   ty('str', '&str', 'Borrowed string slice. Slicing `&s[a..b]` uses **byte** indices and panics off a char boundary (fine for ASCII).', { example: 'let s: &str = "hello";\nlet head = &s[..2]; // "he"' }),
   m('str', 'len', 's.len() -> usize', 'Length in **bytes**, not chars. Use `s.chars().count()` for chars (O(n)).', { returns: 'usize — length in bytes', example: '"abc".len(); // 3\n"é".len();   // 2' }),
   m('str', 'is_empty', 's.is_empty() -> bool', 'True if length is 0.', { returns: 'bool — true if len() == 0', example: 'if s.is_empty() { return 0; }' }),
-  m('str', 'chars', 's.chars() -> Chars', 'Iterator over `char`s. `.rev()`, `.enumerate()`, `.collect::<Vec<char>>()` for random access.', { returns: 'Chars — iterator yielding char', example: 'let cs: Vec<char> = s.chars().collect();' }),
+  m('str', 'chars', 's.chars() -> Chars', 'Iterator over `char`s. `.rev()`, `.enumerate()`, `.collect::<Vec<char>>()` for random access.', { returns: 'Chars — iterator yielding char', example: 'let cs: Vec<char> = s.chars().collect();', learn: {
+      summary: "go through a string character by character",
+      what: "chars is called with a dot on a string and returns an iterator over its characters (type char), from left to right. It decodes UTF-8 properly, so an accented letter or an emoji counts as one character. Use it in a for loop, or chain iterator methods such as .filter(), .count() or .collect().",
+      params: {
+        s: "the string you call it on, before the dot"
+      },
+      returns: "An iterator of char values. Loop over it, or collect it: let v: Vec<char> = s.chars().collect();",
+      example: "let pw = \"abc123\";                                  // some text\nlet vowels = pw.chars().filter(|c| \"aeiou\".contains(*c)).count();  // 1\nlet first = pw.chars().next().unwrap();             // 'a'\nprintln!(\"{} {}\", vowels, first);                   // 1 a",
+      watch: [
+        "s.chars().nth(i) walks from the start every time (O(i)); for repeated indexing collect into a Vec<char> or use as_bytes.",
+        "To turn chars back into text, collect into a String: .collect::<String>()."
+      ]
+    }  }),
   m('str', 'bytes', 's.bytes() -> Bytes', 'Iterator over `u8` bytes. Fast for ASCII; compare with byte literals `b\'a\'`.', { returns: 'Bytes — iterator yielding u8', example: 'let digits = s.bytes().filter(|b| b.is_ascii_digit()).count();' }),
-  m('str', 'as_bytes', 's.as_bytes() -> &[u8]', 'View as a byte slice: O(1) random access `b[i]` for ASCII strings.', { returns: '&[u8] — borrowed bytes (no copy)', example: 'let b = s.as_bytes();\nif b[i] == b\'#\' { }' }),
+  m('str', 'as_bytes', 's.as_bytes() -> &[u8]', 'View as a byte slice: O(1) random access `b[i]` for ASCII strings.', { returns: '&[u8] — borrowed bytes (no copy)', example: 'let b = s.as_bytes();\nif b[i] == b\'#\' { }', learn: {
+      summary: "view a string as raw bytes",
+      what: "as_bytes is called with a dot on a string and gives you its contents as a slice of bytes (&[u8]): numbers from 0 to 255, one per byte. Rust strings are UTF-8 and can't be indexed with s[i], because one character may take several bytes. For plain ASCII text (English letters, digits, punctuation) each character is exactly one byte, so b[i] gives you the i-th character instantly. Byte literals like b'a' let you compare against characters.",
+      params: {
+        s: "the string you call it on, before the dot"
+      },
+      returns: "A &[u8]: a borrowed, read-only view; nothing is copied. Index it with b[i], get its length with b.len(), and turn a byte into a char with b[i] as char.",
+      example: "let word = \"Rust\";               // ASCII text\nlet b = word.as_bytes();         // [82, 117, 115, 116]\nprintln!(\"{}\", b[0] as char);    // R\nprintln!(\"{}\", b[1] == b'u');    // true: compared with a byte literal",
+      watch: [
+        "\"One byte = one character\" only holds for ASCII; accented letters and emoji take several bytes.",
+        "The slice is read-only; for a changeable copy use s.as_bytes().to_vec() or s.into_bytes()."
+      ]
+    }  }),
   m('str', 'char_indices', 's.char_indices() -> CharIndices', 'Iterator of `(byte_index, char)`. Byte index equals char index only for ASCII.', { returns: 'CharIndices — iterator yielding (usize, char)', example: 'for (i, c) in "ab".char_indices() { } // (0, \'a\'), (1, \'b\')' }),
   m('str', 'split', 's.split(pat) -> Split', 'Split on a char, `&str`, or closure. Empty pieces are kept (`"a,,b"` -> `a`, ``, `b`).', { params: [{ label: 'pat', doc: 'char, &str or |c| -> bool' }], returns: 'Split — lazy iterator of &str pieces', example: 'let parts: Vec<&str> = "a,b,c".split(\',\').collect(); // ["a", "b", "c"]' }),
-  m('str', 'split_whitespace', 's.split_whitespace() -> SplitWhitespace', 'Split on runs of whitespace, skipping empties. Standard for parsing input.', { returns: 'SplitWhitespace — iterator of non-empty &str tokens', example: 'let nums: Vec<i64> = line.split_whitespace().map(|t| t.parse().unwrap()).collect();' }),
+  m('str', 'split_whitespace', 's.split_whitespace() -> SplitWhitespace', 'Split on runs of whitespace, skipping empties. Standard for parsing input.', { returns: 'SplitWhitespace — iterator of non-empty &str tokens', example: 'let nums: Vec<i64> = line.split_whitespace().map(|t| t.parse().unwrap()).collect();', learn: {
+      summary: "split text into words",
+      what: "split_whitespace is called with a dot on a string (s.split_whitespace()) and breaks it into pieces wherever there are spaces, tabs or newlines, skipping extra whitespace. It doesn't build a list right away: it returns an iterator, a thing that hands out the pieces one at a time when asked, e.g. by .next() or a for loop. Each piece is a &str, a view into the original string, so nothing is copied.",
+      params: {
+        s: "the string you call it on, before the dot, e.g. a line or the whole input"
+      },
+      returns: "An iterator over the words (each a &str). Loop over it with for, take items with .next(), or gather them with .collect::<Vec<_>>().",
+      example: "let sentence = \"the  quick\\tbrown fox\";  // messy spacing\nfor w in sentence.split_whitespace() {   // visits each word in turn\n    print!(\"[{}]\", w);                   // [the][quick][brown][fox]\n}                                        // end of loop",
+      watch: [
+        "The pieces are text (&str); call .parse() on each to get numbers.",
+        "The words borrow from the original string, so that string must stay alive while you use them."
+      ]
+    }  }),
   m('str', 'split_ascii_whitespace', 's.split_ascii_whitespace() -> SplitAsciiWhitespace', 'Faster ASCII-only `split_whitespace`.', { returns: 'SplitAsciiWhitespace — iterator of non-empty &str tokens', example: 'let mut it = input.split_ascii_whitespace();\nlet n: usize = it.next().unwrap().parse().unwrap();' }),
   m('str', 'lines', 's.lines() -> Lines', 'Iterate lines, stripping `\\n` / `\\r\\n`.', { returns: 'Lines — iterator of &str lines (without terminators)', example: 'let grid: Vec<Vec<u8>> = input.lines().map(|l| l.bytes().collect()).collect();' }),
   m('str', 'trim', 's.trim() -> &str', 'Strip leading/trailing whitespace (also `trim_start`, `trim_end`). Always trim before `parse` on a read line.', { returns: '&str — a borrowed sub-slice (no allocation)', example: '"  hi\\n".trim(); // "hi"' }),
-  m('str', 'parse', 's.parse::<F>() -> Result<F, _>', 'Parse into a number etc. Needs a type: `s.parse::<i64>().unwrap()` or an annotated binding. Fails on surrounding whitespace (e.g. the `\\n` from `read_line`).', { returns: 'Result<F, F::Err> — Ok(value) or Err if malformed', example: 'let n: usize = line.trim().parse().unwrap();' }),
+  m('str', 'parse', 's.parse::<F>() -> Result<F, _>', 'Parse into a number etc. Needs a type: `s.parse::<i64>().unwrap()` or an annotated binding. Fails on surrounding whitespace (e.g. the `\\n` from `read_line`).', { returns: 'Result<F, F::Err> — Ok(value) or Err if malformed', example: 'let n: usize = line.trim().parse().unwrap();', learn: {
+      summary: "convert text into a number",
+      what: "parse is called with a dot on a string and converts the text into another type, most often a number. Rust has many number types (i32, i64, u64, f64, ...), so you must say which one you want: either with the \"turbofish\" s.parse::<i64>() or by giving the variable a type, let x: i64 = s.parse().unwrap(). Text can be malformed, so parse returns a Result: Ok(number), or Err if the text isn't a valid number.",
+      params: {
+        s: "the string you call it on, before the dot, e.g. a word from split_whitespace",
+        F: "the type to produce, written inside ::<...>, e.g. i64 or f64"
+      },
+      returns: "Result<F, _>: Ok(value) if the text was valid, Err otherwise. Usually followed by .unwrap() to get the number.",
+      example: "let temp: f64 = \"21.5\".parse().unwrap();        // 21.5 as a float\nlet year = \"2024\".parse::<u32>().unwrap();      // the turbofish picks u32\nprintln!(\"{}\", year + 1);                       // 2025\nprintln!(\"{}\", \"12a\".parse::<i32>().is_err());  // true: not a number",
+      watch: [
+        "parse doesn't trim: \" 42\" or \"42\\n\" is an Err. Call .trim() first, or use split_whitespace.",
+        "With no type given, the compiler says \"type annotations needed\".",
+        "A value too big for the type (e.g. 3000000000 as i32) is also an Err."
+      ]
+    }  }),
   m('str', 'to_string', 's.to_string() -> String', 'Owned copy. Also works on any `Display` type: `42.to_string()`.', { returns: 'String — an owned copy', example: 'let owned: String = "abc".to_string();\nlet t = 42.to_string(); // "42"' }),
   m('str', 'to_owned', 's.to_owned() -> String', 'Owned copy of a `&str`.', { returns: 'String — an owned copy', example: 'let owned: String = word.to_owned();' }),
   m('str', 'contains', 's.contains(pat) -> bool', 'Substring / char test. O(n·m) worst case.', { params: [{ label: 'pat', doc: '&str, char or closure' }], returns: 'bool — true if pat occurs', example: '"hello".contains("ell"); // true' }),
@@ -216,7 +292,19 @@ export default [
 
   // ---------- Option ----------
   ty('Option', 'Option<T>', '`Some(T)` or `None`. Unpack with `match`, `if let`, `?`, or the combinators below. `.unwrap()` panics on `None`.', { example: 'let first: Option<&i64> = v.first();\nif let Some(&x) = first { }' }),
-  m('Option', 'unwrap', 'opt.unwrap() -> T', 'Return the value or **panic** on `None`.', { returns: 'T — the inner value (panics on None)', example: 'let top = stack.pop().unwrap();' }),
+  m('Option', 'unwrap', 'opt.unwrap() -> T', 'Return the value or **panic** on `None`.', { returns: 'T — the inner value (panics on None)', example: 'let top = stack.pop().unwrap();', learn: {
+      summary: "take the value out of an option",
+      what: "An Option is Rust's way of saying \"maybe there is a value\": it is either Some(value) or None (nothing). Functions return one when an answer might not exist: the first item of an empty list, the next line after input has ended, a key missing from a map. unwrap, called with a dot on the Option, takes the value out of Some; if it is None, the program crashes (panics). Use it when you are sure a value is there.",
+      params: {
+        opt: "the Option you call it on (the part before the dot), e.g. v.first() or it.next()"
+      },
+      returns: "The value inside Some(...). On None the program stops with a panic instead.",
+      example: "let v = vec![7, 3, 9];                   // a non-empty vector\nlet biggest = *v.iter().max().unwrap();  // max() gives Some(&9) -> 9\nprintln!(\"{}\", biggest);                 // 9\n// on an empty vector, max() is None and unwrap() would panic",
+      watch: [
+        "unwrap on None crashes with \"called Option::unwrap() on a None value\".",
+        "Safer choices: opt.unwrap_or(default), or if let Some(x) = opt { ... }."
+      ]
+    }  }),
   m('Option', 'expect', 'opt.expect(msg) -> T', 'Like `unwrap` with a custom panic message.', { params: [{ label: 'msg', doc: '&str' }], returns: 'T — the inner value (panics with msg on None)', example: 'let x = v.last().expect("v must not be empty");' }),
   m('Option', 'unwrap_or', 'opt.unwrap_or(default) -> T', 'Value or `default` (evaluated eagerly; use `unwrap_or_else` for expensive defaults).', { params: [{ label: 'default', doc: 'fallback value' }], returns: 'T — the inner value, or default if None', example: 'let best = v.iter().max().copied().unwrap_or(0);' }),
   m('Option', 'unwrap_or_default', 'opt.unwrap_or_default() -> T', 'Value or `T::default()` (0, "", empty Vec).', { returns: 'T — the inner value, or T::default() if None', example: 'let c = m.get(&k).copied().unwrap_or_default();' }),
@@ -233,7 +321,19 @@ export default [
 
   // ---------- Result ----------
   ty('Result', 'Result<T, E>', '`Ok(T)` or `Err(E)`. Propagate errors with `?` inside a function that returns Result.', { example: 'let r: Result<i64, _> = "42".parse::<i64>(); // Ok(42)' }),
-  m('Result', 'unwrap', 'res.unwrap() -> T', 'Value or **panic** on `Err`. Fine for parsing trusted input.', { returns: 'T — the Ok value (panics on Err)', example: 'let n: i64 = "42".parse().unwrap();' }),
+  m('Result', 'unwrap', 'res.unwrap() -> T', 'Value or **panic** on `Err`. Fine for parsing trusted input.', { returns: 'T — the Ok value (panics on Err)', example: 'let n: i64 = "42".parse().unwrap();', learn: {
+      summary: "take the value out of a result",
+      what: "Some operations can fail, so instead of returning a value directly they return a Result: a box holding either Ok(value) on success or Err(error) on failure. unwrap is a method you call with a dot on such a Result. It takes the value out of Ok; if it was an Err, it crashes the program (a \"panic\") with an error message. In small programs with trusted input that is fine and keeps the code short.",
+      params: {
+        res: "the Result you call it on (the part before the dot), e.g. \"42\".parse::<i32>()"
+      },
+      returns: "The value inside Ok(...), e.g. the number from a successful parse. On Err the program stops with a panic message instead.",
+      example: "let n: i32 = \"42\".parse().unwrap();  // Ok(42) becomes 42\nprintln!(\"{}\", n + 1);               // 43\n// \"4x2\".parse::<i32>().unwrap() would panic: invalid digit",
+      watch: [
+        "A panic ends the program with an error: on bad input you get a runtime error, not a wrong answer.",
+        ".expect(\"message\") works like unwrap but lets you choose the crash message, which helps debugging."
+      ]
+    }  }),
   m('Result', 'expect', 'res.expect(msg) -> T', 'Like `unwrap` but panics with `msg` (plus the error) on `Err`.', { params: [{ label: 'msg', doc: '&str' }], returns: 'T — the Ok value (panics with msg on Err)', example: 'io::stdin().read_line(&mut s).expect("read failed");' }),
   m('Result', 'is_ok', 'res.is_ok() -> bool', 'True if `Ok` (also `is_err`).', { returns: 'bool — true if Ok', example: 'let numeric = tok.parse::<i64>().is_ok();' }),
   m('Result', 'ok', 'res.ok() -> Option<T>', 'Convert to `Option`, discarding the error.', { returns: 'Option<T> — Some(value) if Ok, None if Err', example: 'let nums: Vec<i64> = toks.iter().filter_map(|t| t.parse().ok()).collect();' }),
@@ -259,13 +359,37 @@ export default [
   m('Iterator', 'iter', 'c.iter() -> Iter<&T>', 'Borrowing iterator over a collection (`&T` items).', { returns: 'Iter — iterator yielding &T (collection stays usable)', example: 'for x in v.iter() { }' }),
   m('Iterator', 'iter_mut', 'c.iter_mut() -> IterMut<&mut T>', 'Mutably borrowing iterator.', { returns: 'IterMut — iterator yielding &mut T', example: 'for row in grid.iter_mut() { row.fill(0); }' }),
   m('Iterator', 'into_iter', 'c.into_iter() -> IntoIter<T>', 'Consuming iterator: yields owned items and **moves** the collection (can\'t use it afterwards). On `&v` it yields references.', { returns: 'IntoIter — iterator yielding owned T', example: 'let set: HashSet<i64> = v.into_iter().collect(); // v is moved' }),
-  m('Iterator', 'next', 'it.next() -> Option<Item>', 'Advance and return the next item.', { returns: 'Option<Item> — Some(next item), or None when exhausted', example: 'let mut it = line.split_whitespace();\nlet a = it.next().unwrap();' }),
+  m('Iterator', 'next', 'it.next() -> Option<Item>', 'Advance and return the next item.', { returns: 'Option<Item> — Some(next item), or None when exhausted', example: 'let mut it = line.split_whitespace();\nlet a = it.next().unwrap();', learn: {
+      summary: "get the next item from an iterator",
+      what: "An iterator is a thing that produces values one at a time: words from split_whitespace, characters from chars, numbers from a range. next() is called with a dot and asks it for the next value. Because the iterator might be used up, the answer is an Option: Some(item) if there was one, None when there are no more. Calling next moves the iterator forward, so the iterator variable must be declared let mut.",
+      params: {
+        it: "the iterator you call it on, before the dot; it must be mutable (let mut it = ...)"
+      },
+      returns: "Option<Item>: Some(value) for the next item, None when there are no more. Often followed by .unwrap() when you know an item exists.",
+      example: "let mut colors = \"red green blue\".split_whitespace();  // an iterator of words\nlet first = colors.next().unwrap();                    // \"red\"\nprintln!(\"{:?}\", colors.next());                       // Some(\"green\")\nlet rest: Vec<&str> = colors.collect();                // [\"blue\"]: what was left",
+      watch: [
+        "\"cannot borrow as mutable\" means you forgot let mut on the iterator.",
+        "Each call consumes an item; you can't go back."
+      ]
+    }  }),
   m('Iterator', 'map', 'it.map(f) -> Map', 'Transform each item (lazy).', { params: [{ label: 'f', doc: '|x| -> U' }], returns: 'Map — lazy iterator of f(item)', example: 'let sq: Vec<i64> = v.iter().map(|&x| x * x).collect();' }),
   m('Iterator', 'filter', 'it.filter(pred) -> Filter', 'Keep items where `pred(&item)` is true. Over `iter()` the closure sees `&&T`: write `|&&x| x > 0` or `|x| **x > 0`.', { params: [{ label: 'pred', doc: '|&item| -> bool' }], returns: 'Filter — lazy iterator of matching items', example: 'let pos = v.iter().filter(|&&x| x > 0).count();' }),
   m('Iterator', 'filter_map', 'it.filter_map(f) -> FilterMap', 'Map to `Option` and keep the `Some` values.', { params: [{ label: 'f', doc: '|x| -> Option<U>' }], returns: 'FilterMap — lazy iterator of the unwrapped Some values', example: 'let ds: Vec<u32> = s.chars().filter_map(|c| c.to_digit(10)).collect();' }),
   m('Iterator', 'enumerate', 'it.enumerate() -> Enumerate', 'Yield `(index, item)` pairs (index is `usize`).', { returns: 'Enumerate — iterator of (usize, Item)', example: 'for (i, &x) in v.iter().enumerate() { }' }),
   m('Iterator', 'zip', 'it.zip(other) -> Zip', 'Pair items with another iterator, stopping at the shorter.', { params: [{ label: 'other', doc: 'IntoIterator' }], returns: 'Zip — iterator of (a, b) pairs', example: 'let dot: i64 = a.iter().zip(&b).map(|(x, y)| x * y).sum();' }),
-  m('Iterator', 'rev', 'it.rev() -> Rev', 'Reverse a double-ended iterator: `(0..n).rev()`, `s.chars().rev()`.', { returns: 'Rev — iterator in reverse order', example: 'let r: String = s.chars().rev().collect();' }),
+  m('Iterator', 'rev', 'it.rev() -> Rev', 'Reverse a double-ended iterator: `(0..n).rev()`, `s.chars().rev()`.', { returns: 'Rev — iterator in reverse order', example: 'let r: String = s.chars().rev().collect();', learn: {
+      summary: "walk an iterator backwards",
+      what: "rev is called with a dot on an iterator and gives back a new iterator that produces the same items in reverse order, last one first. It works on iterators that know where their end is, such as ranges (0..n), v.iter() and s.chars(). Nothing is copied or computed until you consume it with a loop or a method like collect.",
+      params: {
+        it: "the iterator you call it on, before the dot, e.g. (1..=5) or v.iter()"
+      },
+      returns: "A new iterator (type Rev) that yields the items back to front. Consume it with for, .collect(), etc.",
+      example: "for i in (1..=3).rev() {  // counts 3, 2, 1\n    print!(\"{} \", i);     // prints: 3 2 1\n}                         // end of loop\nlet top: Vec<i32> = vec![4, 5, 6].into_iter().rev().take(2).collect();  // [6, 5]",
+      watch: [
+        "Wrap a range in parentheses: (0..n).rev(), not 0..n.rev().",
+        "Some iterators (like lines read from input) can't run backwards; collect into a Vec first if the compiler complains."
+      ]
+    }  }),
   m('Iterator', 'sum', 'it.sum::<S>() -> S', 'Add all items. Often needs a type: `v.iter().sum::<i64>()`. Overflow panics in debug builds.', { returns: 'S — the total (0 for an empty iterator)', example: 'let total: i64 = v.iter().sum();' }),
   m('Iterator', 'product', 'it.product::<P>() -> P', 'Multiply all items. Overflows quickly; use `i128` or a modulus for big inputs.', { returns: 'P — the product (1 for an empty iterator)', example: 'let fact: i64 = (1..=10).product(); // 3628800' }),
   m('Iterator', 'max', 'it.max() -> Option<Item>', 'Largest item (last one on ties), `None` if empty. Not for `f64`: use `fold(f64::MIN, f64::max)`.', { returns: 'Option<Item> — Some(largest), or None if empty', example: 'let m = *v.iter().max().unwrap(); // v: Vec<i64>' }),
@@ -340,14 +464,66 @@ export default [
 
   // ---------- std::io ----------
   f('std::io', 'stdin', 'std::io::stdin() -> Stdin', 'Handle to standard input. Read a line with `read_line`, iterate with `lines()`, or read everything with `io::read_to_string`.', { header: 'use std::io;', returns: 'Stdin — shared handle to standard input', example: 'let mut line = String::new();\nio::stdin().read_line(&mut line).unwrap();' }),
-  m('Stdin', 'read_line', 'stdin.read_line(buf) -> io::Result<usize>', 'Append the next line **including its `\\n`** to `buf`. Trim before `parse`, and `clear()` the buffer before reusing it. Returns `Ok(0)` at EOF.', { header: 'use std::io;', params: [{ label: 'buf', doc: '&mut String to append to' }], returns: 'io::Result<usize> — Ok(bytes read), Ok(0) at EOF', example: 'let mut s = String::new();\nio::stdin().read_line(&mut s).unwrap();\nlet n: usize = s.trim().parse().unwrap();' }),
+  m('Stdin', 'read_line', 'stdin.read_line(buf) -> io::Result<usize>', 'Append the next line **including its `\\n`** to `buf`. Trim before `parse`, and `clear()` the buffer before reusing it. Returns `Ok(0)` at EOF.', { header: 'use std::io;', params: [{ label: 'buf', doc: '&mut String to append to' }], returns: 'io::Result<usize> — Ok(bytes read), Ok(0) at EOF', example: 'let mut s = String::new();\nio::stdin().read_line(&mut s).unwrap();\nlet n: usize = s.trim().parse().unwrap();', learn: {
+      summary: "read one line of input into a String",
+      what: "read_line reads the next line of standard input and appends it to a String you provide. You call it with a dot on the stdin handle: std::io::stdin().read_line(&mut s). The &mut means \"lend this String to read_line and allow it to change it\". The text is added to the end of whatever s already holds, and the newline at the end of the line is kept. Reading can fail, so the answer comes wrapped in a Result, which you usually open with .unwrap().",
+      params: {
+        stdin: "the input handle you call it on, before the dot: std::io::stdin()",
+        buf: "a mutable borrow of the String to fill, written &mut s, where s was created with let mut s = String::new();"
+      },
+      returns: "io::Result<usize>: Ok(number of bytes read) on success, where 0 means the input has ended, or Err on an I/O error. Usually you just add .unwrap() and ignore the number.",
+      example: "let mut answer = String::new();                    // empty String we may change\nstd::io::stdin().read_line(&mut answer).unwrap();  // e.g. \"yes\\n\" is appended\nlet answer = answer.trim();                        // drop the newline and spaces\nprintln!(\"{}\", answer == \"yes\");                   // true",
+      watch: [
+        "The newline stays: \"yes\" arrives as \"yes\\n\". Use .trim() before comparing or parsing.",
+        "It appends: when reusing the same String in a loop, call s.clear() first.",
+        "The String must be declared let mut and passed as &mut s, not s."
+      ]
+    }  }),
   m('Stdin', 'lines', 'stdin.lines() -> Lines<StdinLock>', 'Iterator over input lines (newline stripped). Each item is `io::Result<String>`, so `.unwrap()` it.', { header: 'use std::io;', returns: 'Lines — iterator of io::Result<String>', example: 'for line in io::stdin().lines() {\n    let line = line.unwrap();\n}' }),
   m('Stdin', 'lock', 'stdin.lock() -> StdinLock', 'Lock stdin once for faster repeated reads; the lock implements `BufRead`.', { header: 'use std::io::{self, BufRead};', returns: "StdinLock<'static> — a buffered, locked reader", example: 'let mut it = io::stdin().lock().lines();\nlet first = it.next().unwrap().unwrap();' }),
   f('std::io', 'read_to_string', 'std::io::read_to_string(reader) -> io::Result<String>', 'Read all remaining input into a new String: the simplest way to slurp stdin, then split it into tokens.', { header: 'use std::io;', params: [{ label: 'reader', doc: 'any io::Read, e.g. io::stdin()' }], returns: 'io::Result<String> — the whole input', example: 'let input = io::read_to_string(io::stdin()).unwrap();\nlet mut it = input.split_ascii_whitespace();' }),
-  m('Read', 'read_to_string', 'r.read_to_string(buf) -> io::Result<usize>', 'Append all remaining bytes of a reader to `buf` (must be UTF-8). Needs the `Read` trait in scope.', { header: 'use std::io::Read;', params: [{ label: 'buf', doc: '&mut String to append to' }], returns: 'io::Result<usize> — Ok(bytes read)', example: 'let mut input = String::new();\nio::stdin().read_to_string(&mut input).unwrap();' }),
+  m('Read', 'read_to_string', 'r.read_to_string(buf) -> io::Result<usize>', 'Append all remaining bytes of a reader to `buf` (must be UTF-8). Needs the `Read` trait in scope.', { header: 'use std::io::Read;', params: [{ label: 'buf', doc: '&mut String to append to' }], returns: 'io::Result<usize> — Ok(bytes read)', example: 'let mut input = String::new();\nio::stdin().read_to_string(&mut input).unwrap();', learn: {
+      summary: "read all remaining input at once",
+      what: "read_to_string reads everything left on a reader (such as standard input) up to the end and appends it to a String you provide. Reading the whole input in one go and then splitting it is the simplest way to handle input spread over several lines or several values per line. It belongs to the Read trait (a trait is a named set of abilities a type can have), so you must bring it into scope with use std::io::Read; before you can call it with a dot.",
+      params: {
+        r: "the reader you call it on, before the dot: usually std::io::stdin()",
+        buf: "a mutable borrow of the String to fill: &mut s, where let mut s = String::new();"
+      },
+      returns: "io::Result<usize>: Ok(number of bytes read) or Err on an I/O error. Normally you just .unwrap() it; the text is now in your String.",
+      example: "use std::io::Read;                                    // enables read_to_string\nlet mut text = String::new();                         // empty buffer\nstd::io::stdin().read_to_string(&mut text).unwrap();  // whole input -> text\nprintln!(\"{} lines\", text.lines().count());           // e.g. 3 lines",
+      watch: [
+        "Without use std::io::Read; you get \"no method named read_to_string found\".",
+        "It keeps every newline; split or trim the text before parsing."
+      ]
+    }  }),
   ty('BufRead', 'trait BufRead', 'Buffered-reader trait providing `lines()`, `read_line`, `split`. Implemented by `StdinLock` and `BufReader`; bring it into scope to call its methods.', { header: 'use std::io::BufRead;', example: 'use std::io::{self, BufRead};\nfor line in io::stdin().lock().lines() { let line = line.unwrap(); }' }),
   m('BufRead', 'lines', 'r.lines() -> Lines<Self>', 'Iterator over lines without the trailing newline; each item is `io::Result<String>`.', { header: 'use std::io::BufRead;', returns: 'Lines<Self> — iterator of io::Result<String>', example: 'let rows: Vec<String> = io::stdin().lock().lines().map(|l| l.unwrap()).collect();' }),
   ty('BufWriter', 'BufWriter<W>', 'Buffers writes to `W` (e.g. stdout) so thousands of `writeln!` calls don\'t each hit a syscall. Flushed on drop; call `out.flush()` if you need it earlier.', { header: 'use std::io::{BufWriter, Write};', example: 'let mut out = BufWriter::new(io::stdout().lock());\nfor x in &v { writeln!(out, "{}", x).unwrap(); }' }),
   f('BufWriter', 'new', 'BufWriter::new(inner) -> BufWriter<W>', 'Wrap a writer with an 8 KiB buffer. Write to it with `write!` / `writeln!` (needs `use std::io::Write`).', { header: 'use std::io::{BufWriter, Write};', params: [{ label: 'inner', doc: 'the io::Write to buffer, e.g. io::stdout().lock()' }], returns: 'BufWriter<W> — buffered writer', example: 'let mut out = BufWriter::new(io::stdout().lock());\nwriteln!(out, "{}", ans).unwrap();' }),
   f('std::io', 'stdout', 'std::io::stdout() -> Stdout', 'Handle to standard output; `.lock()` it and wrap in `BufWriter` for fast output.', { header: 'use std::io;', returns: 'Stdout — shared handle to standard output', example: 'let out = io::stdout();\nlet mut w = BufWriter::new(out.lock());' }),
 ];
+
+// Beginner explanations for entries introduced by problems ("New in this problem" cards).
+const LEARN = [
+  ["String", "new", {
+  "summary": "make a new, empty text string",
+  "what": "Creates an empty `String`: a piece of text your program owns and can grow. You usually make one first and then let something fill it, for example `read_line`, which appends the line it reads. Declare it with `let mut` because filling it changes it.",
+  "returns": "An empty `String` (`\"\"`), ready to be appended to.",
+  "example": "let mut name = String::new();   // empty text, mutable so it can grow\nname.push_str(\"Ada\");            // name is now \"Ada\"\nprintln!(\"{}\", name);            // prints Ada",
+  "watch": [
+    "Without `mut`, any attempt to fill it fails with \"cannot borrow as mutable\"."
+  ]
+}],
+  ["std::io", "stdin", {
+  "summary": "get a handle to the program's input",
+  "what": "Returns a handle to **standard input**, the text fed into your program (the keyboard in a terminal, the test input on Crucible). The handle itself does not read anything; you call a method on it, such as `.read_line(&mut s)` to read one line, or `.lines()` to loop over lines. Add `use std::io;` at the top so you can write `io::stdin()`.",
+  "returns": "A `Stdin` handle. Call a reading method on it right away, e.g. `io::stdin().read_line(&mut s)`.",
+  "example": "use std::io;                          // lets you write io::stdin()\nlet mut s = String::new();            // somewhere to put the text\nio::stdin().read_line(&mut s).unwrap(); // read one line into s\nprintln!(\"{} chars\", s.trim().len());  // trim drops the newline",
+  "watch": [
+    "Without `use std::io;` you must write the full path `std::io::stdin()`."
+  ]
+}],
+];
+for (const [owner, name, learn] of LEARN) { const e = entries.find((x) => x.owner === owner && x.name === name); if (e && !e.learn) e.learn = learn; }
+
+export default entries;

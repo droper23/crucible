@@ -48,11 +48,43 @@ export default [
   { name: '#include', kind: 'directive', sig: '#include <header>', doc: 'Include a header. `<bits/stdc++.h>` pulls in everything (the Crucible harness provides it).', example: '#include <bits/stdc++.h>\nusing namespace std;', insert: '#include <${1:vector}>' },
 
   // ───────────── iostream ─────────────
-  { name: 'cout', owner: 'std', kind: 'constant', sig: 'std::ostream cout', doc: 'Standard output stream: `cout << x << " " << y << "\\n";`. Prefer `"\\n"` over `endl` in loops (endl flushes).', example: 'cout << ans << "\\n";\ncout << a << " " << b << "\\n";', header: '#include <iostream>' },
-  { name: 'cin', owner: 'std', kind: 'constant', sig: 'std::istream cin', doc: 'Standard input stream; `cin >> n` skips whitespace. `while (cin >> x)` reads until EOF. After `cin >>`, a following `getline` reads the leftover newline — call `cin.ignore()` first.', example: 'int n; cin >> n;\nvector<int> a(n);\nfor (auto& x : a) cin >> x;', header: '#include <iostream>' },
+  { name: 'cout', owner: 'std', kind: 'constant', sig: 'std::ostream cout', doc: 'Standard output stream: `cout << x << " " << y << "\\n";`. Prefer `"\\n"` over `endl` in loops (endl flushes).', example: 'cout << ans << "\\n";\ncout << a << " " << b << "\\n";', header: '#include <iostream>', learn: {
+    summary: "the standard output stream",
+    what: "std::cout (\"character output\") is an object that stands for your program's output: the text the judge reads. You send values to it with the << operator, read as \"goes into\": std::cout << x puts x into the output. You can chain several << in one statement, and numbers are converted to text automatically. Nothing adds a line break for you; send \"\\n\" (or std::endl) when you want one.",
+    example: "int n = 3;                                   // something to show\nstd::cout << \"n = \" << n << \"\\n\";            // n = 3, then a line break\nstd::cout << n * 2 << ' ' << n + 1 << \"\\n\";  // 6 4",
+    watch: [
+      "Needs #include <iostream>; write std::cout, or add using namespace std; to write cout.",
+      "Values are not separated automatically: cout << 1 << 2 prints 12. Add \" \" yourself.",
+      "std::endl also flushes the output, which is slow inside big loops; prefer \"\\n\"."
+    ]
+  }  },
+  { name: 'cin', owner: 'std', kind: 'constant', sig: 'std::istream cin', doc: 'Standard input stream; `cin >> n` skips whitespace. `while (cin >> x)` reads until EOF. After `cin >>`, a following `getline` reads the leftover newline — call `cin.ignore()` first.', example: 'int n; cin >> n;\nvector<int> a(n);\nfor (auto& x : a) cin >> x;', header: '#include <iostream>', learn: {
+    summary: "the standard input stream",
+    what: "std::cin (\"character input\") is an object that stands for your program's input: the keyboard, or the test data the judge feeds in. Think of it as a stream, a queue of characters consumed from the front. The >> operator (read as \"comes out of cin into\") takes the next value and stores it in a variable, converting to that variable's type: std::cin >> n reads a number into an int, std::cin >> word reads one whitespace-separated word into a string. Spaces and newlines between values are skipped automatically.",
+    example: "int age; std::string name;  // places to store the input\nstd::cin >> name >> age;    // input \"Ada 36\": name = \"Ada\", age = 36\nif (!std::cin) return 1;    // false if a read failed or input ran out",
+    watch: [
+      "std::cin >> s reads only one word; use std::getline(std::cin, s) for a whole line with spaces.",
+      "If the input doesn't match the type (letters into an int), cin enters a failed state and every later read does nothing.",
+      ">> leaves the newline behind, which trips up a following getline."
+    ]
+  }  },
   { name: 'cerr', owner: 'std', kind: 'constant', sig: 'std::ostream cerr', doc: 'Unbuffered error stream — debug prints that don\'t affect stdout.', example: 'cerr << "dbg i=" << i << " x=" << x << "\\n";', header: '#include <iostream>' },
   { name: 'endl', owner: 'std', kind: 'function', sig: 'std::ostream& endl(std::ostream& os)', params: [{ label: 'os', doc: 'stream' }], returns: 'std::ostream& — the same stream, after flushing', doc: 'Writes `\\n` **and flushes** — slow in big loops; use `"\\n"`.', example: 'cout << "done" << endl;  // newline + flush', header: '#include <iostream>' },
-  { name: 'getline', owner: 'std', kind: 'function', sig: 'std::istream& getline(std::istream& is, std::string& str, char delim = \'\\n\')', params: [{ label: 'is', doc: 'input stream (cin or a stringstream)' }, { label: 'str', doc: 'receives the line, without the delimiter' }, { label: 'delim', doc: 'stop character' }], returns: 'std::istream& — the stream; converts to false at EOF/failure', doc: 'Read a whole line (or up to *delim*). Split CSV-like strings with a stringstream and `getline(ss, tok, \',\')`.', example: 'string line;\nwhile (getline(cin, line)) { }', header: '#include <string>' },
+  { name: 'getline', owner: 'std', kind: 'function', sig: 'std::istream& getline(std::istream& is, std::string& str, char delim = \'\\n\')', params: [{ label: 'is', doc: 'input stream (cin or a stringstream)' }, { label: 'str', doc: 'receives the line, without the delimiter' }, { label: 'delim', doc: 'stop character' }], returns: 'std::istream& — the stream; converts to false at EOF/failure', doc: 'Read a whole line (or up to *delim*). Split CSV-like strings with a stringstream and `getline(ss, tok, \',\')`.', example: 'string line;\nwhile (getline(cin, line)) { }', header: '#include <string>', learn: {
+    summary: "read a whole line into a string",
+    what: "std::getline reads characters from an input stream (usually std::cin) into a std::string until it reaches the end of the line. Unlike std::cin >> s, which stops at the first space, getline keeps spaces, so you get the full line. The newline itself is consumed and thrown away; it is not stored in the string. Whatever the string held before is replaced.",
+    params: {
+      is: "the stream to read from: pass std::cin for the program's input",
+      str: "a std::string variable that receives the line, e.g. line",
+      delim: "optional stop character, default '\\n' (end of line). getline(std::cin, s, ',') reads up to a comma"
+    },
+    returns: "The stream itself. Used as a condition it is true if the read worked and false at end of input, so while (std::getline(std::cin, line)) { ... } processes every line.",
+    example: "std::string line;                      // will hold the text\nif (std::getline(std::cin, line))      // read one full line, spaces included\n    std::cout << line.size() << \"\\n\";  // e.g. 11 for \"hello world\"",
+    watch: [
+      "After std::cin >> n, the newline is still waiting, so the next getline returns an empty string. Call std::cin.ignore() in between.",
+      "Input with Windows line endings can leave a '\\r' at the end of the string."
+    ]
+  }  },
   { name: 'ios::sync_with_stdio', owner: 'std', kind: 'function', sig: 'ios::sync_with_stdio(bool sync)', params: [{ label: 'sync', doc: 'false to decouple from C stdio' }], returns: 'bool — the previous synchronization setting', doc: 'Fast I/O idiom: `ios::sync_with_stdio(false); cin.tie(nullptr);`. Afterwards don\'t mix `printf`/`scanf` with `cout`/`cin`.', example: 'ios::sync_with_stdio(false);\ncin.tie(nullptr);', header: '#include <iostream>' },
   { name: 'stringstream', owner: 'std', kind: 'type', sig: 'std::stringstream ss(str)', params: [{ label: 'str', doc: 'initial contents' }], doc: 'String-backed stream. `istringstream` to split words with `>>`, `ostringstream` to build strings (`ss.str()`).', example: 'istringstream ss(s); string w;\nwhile (ss >> w) words.push_back(w);', header: '#include <sstream>' },
   { name: 'setprecision', owner: 'std', kind: 'function', sig: 'setprecision(int n)', params: [{ label: 'n', doc: 'digits' }], returns: 'unspecified manipulator — use with << on a stream', doc: 'With `fixed`, prints *n* digits after the decimal point: `cout << fixed << setprecision(5) << x;`.', example: 'cout << fixed << setprecision(6) << x << "\\n";', header: '#include <iomanip>' },
@@ -282,11 +314,41 @@ export default [
   { name: 'partial_sort', owner: 'std', kind: 'function', sig: 'void partial_sort(RandomIt first, RandomIt middle, RandomIt last)', params: [{ label: 'first', doc: 'range begin' }, { label: 'middle', doc: 'end of the sorted prefix' }, { label: 'last', doc: 'range end' }], returns: 'void', doc: 'Make [first, middle) the smallest elements in sorted order, **O(n log k)**.', example: 'partial_sort(v.begin(), v.begin() + k, v.end());  // k smallest, sorted', header: '#include <algorithm>' },
   { name: 'nth_element', owner: 'std', kind: 'function', sig: 'void nth_element(RandomIt first, RandomIt nth, RandomIt last)', params: [{ label: 'first', doc: 'range begin' }, { label: 'nth', doc: 'position to fix' }, { label: 'last', doc: 'range end' }], returns: 'void', doc: 'Quickselect: puts the element that would be at *nth* in sorted order there, smaller before, larger after. Average **O(n)** — "kth largest".', example: 'nth_element(v.begin(), v.begin() + k, v.end());\nint kth = v[k];  // k-th smallest (0-based)', header: '#include <algorithm>' },
   { name: 'reverse', owner: 'std', kind: 'function', sig: 'void reverse(BidirIt first, BidirIt last)', params: [{ label: 'first', doc: 'range begin' }, { label: 'last', doc: 'range end' }], returns: 'void', doc: 'Reverse a range in place, **O(n)**. Returns void.', example: 'reverse(s.begin(), s.end());', header: '#include <algorithm>' },
-  { name: 'rotate', owner: 'std', kind: 'function', sig: 'ForwardIt rotate(ForwardIt first, ForwardIt middle, ForwardIt last)', params: [{ label: 'first', doc: 'range begin' }, { label: 'middle', doc: 'element that becomes first' }, { label: 'last', doc: 'range end' }], returns: 'ForwardIt — new position of the element that was at first', doc: 'Left-rotate so *middle* becomes the first element, **O(n)**. Rotate right by k: `rotate(v.begin(), v.end() - k, v.end())`.', example: 'rotate(v.begin(), v.begin() + k, v.end());  // left-rotate by k', header: '#include <algorithm>' },
+  { name: 'rotate', owner: 'std', kind: 'function', sig: 'ForwardIt rotate(ForwardIt first, ForwardIt middle, ForwardIt last)', params: [{ label: 'first', doc: 'range begin' }, { label: 'middle', doc: 'element that becomes first' }, { label: 'last', doc: 'range end' }], returns: 'ForwardIt — new position of the element that was at first', doc: 'Left-rotate so *middle* becomes the first element, **O(n)**. Rotate right by k: `rotate(v.begin(), v.end() - k, v.end())`.', example: 'rotate(v.begin(), v.begin() + k, v.end());  // left-rotate by k', header: '#include <algorithm>', learn: {
+    summary: "shift elements around in a circle",
+    what: "std::rotate rearranges a range in place so that the element at middle becomes the first one; the elements that were before middle wrap around to the end, keeping their order. Picture the range as a ring of seats where everyone shifts toward the front until middle's occupant sits in the first seat. Ranges in C++ are given by iterators, which are like bookmarks pointing at positions in a container. It works on any sub-range, needs no extra array, and runs in linear time.",
+    params: {
+      first: "iterator to the start of the range, e.g. v.begin()",
+      middle: "iterator to the element that should end up first, e.g. v.begin() + 3",
+      last: "iterator just past the end of the range, e.g. v.end() or v.begin() + 4"
+    },
+    returns: "An iterator to where the original first element ended up. Often ignored.",
+    example: "std::vector<char> v = {'a', 'b', 'c', 'd', 'e'};      // a list of items\n// range = first 4 items; middle = 'd', so 'd' comes first:\nstd::rotate(v.begin(), v.begin() + 3, v.begin() + 4);  // v is now d a b c e",
+    watch: [
+      "It shifts toward the front: the elements before middle move to the back. Decide which element you want first, then point middle at it.",
+      "middle must lie between first and last; anything else is undefined behavior.",
+      "Needs #include <algorithm>."
+    ]
+  }  },
   { name: 'min', owner: 'std', kind: 'function', sig: 'const T& min(const T& a, const T& b)  |  T min(initializer_list<T> il)', params: [{ label: 'a', doc: 'first value' }, { label: 'b', doc: 'second value' }, { label: 'il', doc: 'brace list of values' }], returns: 'const T& — the smaller argument (T by value for the initializer-list form)', doc: 'Smaller value. Both args must have the **same type** — `min(x, 0LL)` or `min<long long>(a, b)` when mixing. Many: `min({a, b, c})`.', example: 'int lo = min(a, b);\nint m3 = min({a, b, c});', header: '#include <algorithm>' },
   { name: 'max', owner: 'std', kind: 'function', sig: 'const T& max(const T& a, const T& b)  |  T max(initializer_list<T> il)', params: [{ label: 'a', doc: 'first value' }, { label: 'b', doc: 'second value' }, { label: 'il', doc: 'brace list of values' }], returns: 'const T& — the larger argument (T by value for the initializer-list form)', doc: 'Larger value. Same-type rule: `max(ans, (int)v.size())`. Several values: `max({a, b, c})`.', example: 'best = max(best, cur);\nint m = max({x, y, z});', header: '#include <algorithm>' },
   { name: 'minmax', owner: 'std', kind: 'function', sig: 'pair<const T&, const T&> minmax(const T& a, const T& b)', params: [{ label: 'a', doc: 'first value' }, { label: 'b', doc: 'second value' }], returns: 'pair<const T&, const T&> — (smaller, larger); dangles if given temporaries', doc: 'Returns `{min, max}`. Careful binding references to temporaries; `auto [lo, hi] = minmax(a, b);` with lvalues is fine.', example: 'auto [lo, hi] = minmax(a, b);', header: '#include <algorithm>' },
-  { name: 'clamp', owner: 'std', kind: 'function', sig: 'const T& clamp(const T& v, const T& lo, const T& hi)', params: [{ label: 'v', doc: 'value' }, { label: 'lo', doc: 'lower bound' }, { label: 'hi', doc: 'upper bound' }], returns: 'const T& — v limited to [lo, hi]', doc: 'C++17: *v* limited to [lo, hi].', example: 'int px = clamp(v, 0, 255);', header: '#include <algorithm>' },
+  { name: 'clamp', owner: 'std', kind: 'function', sig: 'const T& clamp(const T& v, const T& lo, const T& hi)', params: [{ label: 'v', doc: 'value' }, { label: 'lo', doc: 'lower bound' }, { label: 'hi', doc: 'upper bound' }], returns: 'const T& — v limited to [lo, hi]', doc: 'C++17: *v* limited to [lo, hi].', example: 'int px = clamp(v, 0, 255);', header: '#include <algorithm>', learn: {
+    summary: "force a value into a range",
+    what: "std::clamp(v, lo, hi) keeps a value inside the range lo..hi, inclusive. If v is below lo you get lo, if it is above hi you get hi, otherwise you get v unchanged. It is a one-call replacement for std::min(std::max(v, lo), hi), handy for limits such as volume levels, screen coordinates or percentages.",
+    params: {
+      v: "the value to limit, e.g. volume + 15",
+      lo: "the smallest allowed value, e.g. 0",
+      hi: "the largest allowed value, e.g. 100; must not be less than lo"
+    },
+    returns: "The limited value (technically a const reference to v, lo or hi). Store it or use it directly: int x = std::clamp(...);",
+    example: "int volume = 95;                           // current level\nvolume = std::clamp(volume + 15, 0, 100);  // 110 is capped to 100\nint px = std::clamp(-5, 0, 255);           // -5 is raised to 0",
+    watch: [
+      "All three arguments must have the same type: std::clamp(x, 0, 100L) with an int x won't compile. Cast if needed.",
+      "If lo > hi the behavior is undefined.",
+      "Needs #include <algorithm> and C++17."
+    ]
+  }  },
   { name: 'min_element', owner: 'std', kind: 'function', sig: 'ForwardIt min_element(ForwardIt first, ForwardIt last, Compare comp = less<>())', params: [{ label: 'first', doc: 'range begin' }, { label: 'last', doc: 'range end' }, { label: 'comp', doc: 'comparator' }], returns: 'ForwardIt — to the first smallest element, or last if the range is empty', doc: 'Iterator to the smallest element, **O(n)**. Dereference for the value; subtract `begin()` for the index.', example: 'int mn = *min_element(v.begin(), v.end());', header: '#include <algorithm>' },
   { name: 'max_element', owner: 'std', kind: 'function', sig: 'ForwardIt max_element(ForwardIt first, ForwardIt last, Compare comp = less<>())', params: [{ label: 'first', doc: 'range begin' }, { label: 'last', doc: 'range end' }, { label: 'comp', doc: 'comparator' }], returns: 'ForwardIt — to the first largest element, or last if the range is empty', doc: 'Iterator to the largest element, **O(n)**. UB to dereference on an empty range.', example: 'int idx = max_element(v.begin(), v.end()) - v.begin();', header: '#include <algorithm>' },
   { name: 'swap', owner: 'std', kind: 'function', sig: 'void swap(T& a, T& b)', params: [{ label: 'a', doc: 'first object' }, { label: 'b', doc: 'second object' }], returns: 'void', doc: 'Exchange values. **O(1)** for containers (swaps internals).', example: 'swap(a[i], a[j]);', header: '#include <utility>' },
@@ -317,7 +379,20 @@ export default [
   { name: 'iota', owner: 'std', kind: 'function', sig: 'void iota(ForwardIt first, ForwardIt last, T value)', params: [{ label: 'first', doc: 'range begin' }, { label: 'last', doc: 'range end' }, { label: 'value', doc: 'starting value' }], returns: 'void', doc: 'Fill with value, value+1, …. Initialise DSU parents or an index array to sort.', example: 'vector<int> parent(n);\niota(parent.begin(), parent.end(), 0);', header: '#include <numeric>' },
   { name: 'partial_sum', owner: 'std', kind: 'function', sig: 'OutputIt partial_sum(InputIt first, InputIt last, OutputIt d_first)', params: [{ label: 'first', doc: 'input begin' }, { label: 'last', doc: 'input end' }, { label: 'd_first', doc: 'output begin (may equal first)' }], returns: 'OutputIt — one past the last element written', doc: 'Prefix sums: out[i] = in[0] + … + in[i]. Accumulates in the element type — watch overflow.', example: 'partial_sum(a.begin(), a.end(), pre.begin() + 1); // pre[0] = 0', header: '#include <numeric>' },
   { name: 'adjacent_difference', owner: 'std', kind: 'function', sig: 'OutputIt adjacent_difference(InputIt first, InputIt last, OutputIt d_first)', params: [{ label: 'first', doc: 'input begin' }, { label: 'last', doc: 'input end' }, { label: 'd_first', doc: 'output begin' }], returns: 'OutputIt — one past the last element written', doc: 'out[0] = in[0], out[i] = in[i] − in[i−1].', example: 'vector<int> d(a.size());\nadjacent_difference(a.begin(), a.end(), d.begin());  // d[0] = a[0]', header: '#include <numeric>' },
-  { name: 'gcd', owner: 'std', kind: 'function', sig: 'M gcd(M m, N n)', params: [{ label: 'm', doc: 'integer' }, { label: 'n', doc: 'integer' }], returns: 'common type of M and N — greatest common divisor (non-negative; gcd(0, 0) = 0)', doc: 'C++17 greatest common divisor (of absolute values); gcd(0, 0) = 0. **O(log min)**.', example: 'int g = gcd(12, 18);  // 6', header: '#include <numeric>' },
+  { name: 'gcd', owner: 'std', kind: 'function', sig: 'M gcd(M m, N n)', params: [{ label: 'm', doc: 'integer' }, { label: 'n', doc: 'integer' }], returns: 'common type of M and N — greatest common divisor (non-negative; gcd(0, 0) = 0)', doc: 'C++17 greatest common divisor (of absolute values); gcd(0, 0) = 0. **O(log min)**.', example: 'int g = gcd(12, 18);  // 6', header: '#include <numeric>', learn: {
+    summary: "greatest common divisor of two integers",
+    what: "std::gcd(m, n) returns the greatest common divisor: the largest whole number that divides both m and n with no remainder. Typical uses are simplifying fractions (divide top and bottom by their gcd) and computing a least common multiple, a / gcd(a, b) * b (C++17 also has std::lcm). Negative inputs are treated as their absolute values, and gcd(x, 0) is |x|.",
+    params: {
+      m: "the first integer, e.g. 18",
+      n: "the second integer, e.g. 24"
+    },
+    returns: "The gcd as a non-negative integer. gcd(0, 0) is 0.",
+    example: "int num = 18, den = 24;                          // the fraction 18/24\nint g = std::gcd(num, den);                      // g = 6\nstd::cout << num / g << \"/\" << den / g << \"\\n\";  // prints 3/4",
+    watch: [
+      "Needs #include <numeric> and C++17.",
+      "Both arguments must be integers; with long long values make both long long to avoid surprises."
+    ]
+  }  },
   { name: 'lcm', owner: 'std', kind: 'function', sig: 'M lcm(M m, N n)', params: [{ label: 'm', doc: 'integer' }, { label: 'n', doc: 'integer' }], returns: 'common type of M and N — least common multiple (0 if either is 0); may overflow', doc: 'C++17 least common multiple. Can overflow — use long long arguments.', example: 'long long l = lcm(4LL, 6LL);  // 12', header: '#include <numeric>' },
 
   // ───────────── misc utilities ─────────────

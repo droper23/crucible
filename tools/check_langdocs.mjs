@@ -20,6 +20,12 @@ for (const f of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
     if (e.kind === 'method' && !e.owner) err(e, 'method without owner');
     const inner = (e.sig.match(/\((.*)\)/s) || [, ''])[1];
     for (const p of e.params || []) if (!inner.includes(p.label)) err(e, `param label "${p.label}" not in sig parens`);
+    if (e.learn) {
+      const L = e.learn;
+      for (const k of ['summary', 'what', 'example']) if (!L[k]) err(e, `learn.${k} missing`);
+      for (const k of Object.keys(L.params || {})) if (!e.sig.includes(k)) err(e, `learn.params "${k}" not in sig`);
+      if (NEEDS_RET.has(e.kind) && !L.returns) err(e, 'learn.returns missing');
+    }
   }
   console.log(`${lang}: ${arr.length} entries`);
 }

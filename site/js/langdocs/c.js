@@ -40,19 +40,84 @@ export default [
   { name: 'main', kind: 'function', sig: 'int main(int argc, char **argv)', params: [{ label: 'argc', doc: 'number of command-line args' }, { label: 'argv', doc: 'array of argument strings' }], doc: 'Program entry point. Return 0 for success. `int main(void)` is fine when you ignore arguments.', insert: 'int main(void) {\n\t$0\n\treturn 0;\n}', returns: 'int — exit status: 0 (EXIT_SUCCESS) for success, non-zero for failure', example: 'int main(int argc, char **argv) {\n    printf("%d args\\n", argc - 1);\n    return 0;\n}' },
 
   // ───────────── stdio.h ─────────────
-  { name: 'printf', kind: 'function', sig: 'int printf(const char *format, ...)', params: [{ label: 'format', doc: 'format string with % specifiers' }], doc: 'Formatted output to stdout. Specifiers: `%d` int, `%lld` long long, `%u` unsigned, `%zu` size_t, `%ld` long, `%f` double, `%.2f` 2 decimals, `%c` char, `%s` string, `%p` pointer, `%x` hex, `%%` literal %. Mismatched specifier is undefined behaviour.', example: 'printf("%d %lld %.3f %s\\n", n, big, x, s);', insert: 'printf("${1:%d}\\n", ${2:x});', header: '#include <stdio.h>', returns: 'int — number of characters written, or a negative value on error' },
-  { name: 'scanf', kind: 'function', sig: 'int scanf(const char *format, ...)', params: [{ label: 'format', doc: 'format string with % specifiers' }], doc: 'Formatted input from stdin; pass **addresses** (`&x`) except for char arrays. Returns number of items read, or `EOF`. `%d` int, `%lld` long long, `%lf` double (not `%f`!), `%s` word (no spaces), `" %c"` skips whitespace first.', example: 'int n; long long x;\nscanf("%d %lld", &n, &x);\nwhile (scanf("%d", &v) == 1) { ... }', header: '#include <stdio.h>', returns: 'int — number of items successfully assigned, or EOF if input ends before the first conversion' },
+  { name: 'printf', kind: 'function', sig: 'int printf(const char *format, ...)', params: [{ label: 'format', doc: 'format string with % specifiers' }], doc: 'Formatted output to stdout. Specifiers: `%d` int, `%lld` long long, `%u` unsigned, `%zu` size_t, `%ld` long, `%f` double, `%.2f` 2 decimals, `%c` char, `%s` string, `%p` pointer, `%x` hex, `%%` literal %. Mismatched specifier is undefined behaviour.', example: 'printf("%d %lld %.3f %s\\n", n, big, x, s);', insert: 'printf("${1:%d}\\n", ${2:x});', header: '#include <stdio.h>', returns: 'int — number of characters written, or a negative value on error', learn: {
+    summary: "print formatted text",
+    what: "printf (\"print formatted\") writes text to standard output. The first argument is a format string: ordinary characters are printed as they are, and each placeholder starting with % is replaced by the next extra argument: %d for an int, %s for a string, %c for a char, %f for a double, %lld for a long long. Nothing ends the line for you; put \\n (newline) in the format wherever you want a line break.",
+    params: {
+      format: "the text to print, with % placeholders, in double quotes, e.g. \"x = %d\\n\"",
+      "...": "the values that fill the placeholders, in order, e.g. x. Their number and types must match the placeholders"
+    },
+    returns: "The number of characters printed (negative on error). Almost always ignored.",
+    example: "int apples = 3;                        // a value to show\nprintf(\"apples: %d\\n\", apples);        // apples: 3\nprintf(\"%s has %d legs\\n\", \"cat\", 4);  // cat has 4 legs\nprintf(\"%.2f\\n\", 3.14159);             // 3.14 (two decimals)",
+    watch: [
+      "Forgetting \\n at the end leaves the line unfinished; the expected output usually includes it.",
+      "A placeholder that doesn't match its argument (e.g. %d with a double) prints garbage. The compiler warns: read the warnings.",
+      "To print a literal % sign, write %%."
+    ]
+  }  },
+  { name: 'scanf', kind: 'function', sig: 'int scanf(const char *format, ...)', params: [{ label: 'format', doc: 'format string with % specifiers' }], doc: 'Formatted input from stdin; pass **addresses** (`&x`) except for char arrays. Returns number of items read, or `EOF`. `%d` int, `%lld` long long, `%lf` double (not `%f`!), `%s` word (no spaces), `" %c"` skips whitespace first.', example: 'int n; long long x;\nscanf("%d %lld", &n, &x);\nwhile (scanf("%d", &v) == 1) { ... }', header: '#include <stdio.h>', returns: 'int — number of items successfully assigned, or EOF if input ends before the first conversion', learn: {
+    summary: "read formatted values from input",
+    what: "scanf reads from standard input and converts the text into values, guided by a format string with placeholders like printf's: %d reads an int, %lld a long long, %lf a double, %s one word, %c one character. Each placeholder except %c first skips whitespace (spaces and newlines), so values may be separated by spaces or line breaks. Because scanf has to store into your variables, you pass their addresses with & (the \"address-of\" operator) so it knows where to write.",
+    params: {
+      format: "the placeholders describing what to read, e.g. \"%d %lf\"",
+      "...": "the addresses of the variables to fill, in order, e.g. &count, &price. A char array is already an address, so it needs no &"
+    },
+    returns: "How many values were successfully read and stored, or EOF (-1) if the input ended first. Check it: if (scanf(\"%d\", &n) == 1) ...",
+    example: "char item[32]; double price;               // where the values go\nif (scanf(\"%31s %lf\", item, &price) == 2)  // read a word, then a number\n    printf(\"%s: %.2f\\n\", item, price);     // e.g. tea: 1.50",
+    watch: [
+      "Forgetting & (scanf(\"%d\", n)) passes the value instead of its address and usually crashes.",
+      "Use %lf (not %f) for a double in scanf, and %lld for long long.",
+      "Plain %s stops at the first space and can overflow; give a width such as %31s for a 32-byte array."
+    ]
+  }  },
   { name: 'puts', kind: 'function', sig: 'int puts(const char *s)', params: [{ label: 's', doc: 'null-terminated string' }], doc: 'Write *s* plus a newline to stdout. Faster than `printf("%s\\n", s)`.', header: '#include <stdio.h>', returns: 'int — a non-negative value on success, or EOF on error', example: 'puts("Hello, world!");  // prints with a trailing newline' },
   { name: 'putchar', kind: 'function', sig: 'int putchar(int c)', params: [{ label: 'c', doc: 'character to write' }], doc: 'Write one character to stdout.', header: '#include <stdio.h>', returns: 'int — the character written (as unsigned char), or EOF on error', example: 'for (int i = 0; i < 3; i++)\n    putchar(\'*\');\nputchar(\'\\n\');' },
   { name: 'getchar', kind: 'function', sig: 'int getchar(void)', doc: 'Read one character from stdin; returns `EOF` at end. Store the result in an `int`, not `char`, so `EOF` is distinguishable.', example: 'int c;\nwhile ((c = getchar()) != EOF) { ... }', header: '#include <stdio.h>', returns: 'int — the next character as unsigned char converted to int, or EOF at end of input / error' },
-  { name: 'fgets', kind: 'function', sig: 'char *fgets(char *buf, int n, FILE *stream)', params: [{ label: 'buf', doc: 'destination buffer' }, { label: 'n', doc: 'buffer size (reads at most n-1 chars)' }, { label: 'stream', doc: 'input stream, usually stdin' }], doc: 'Read a line safely (bounded). Keeps the trailing `\\n` if it fits — strip with `buf[strcspn(buf, "\\n")] = 0;`. Returns NULL on EOF.', example: 'char line[256];\nif (fgets(line, sizeof line, stdin))\n    line[strcspn(line, "\\n")] = 0;', header: '#include <stdio.h>', returns: 'char * — buf on success, or NULL at end of file / error with nothing read' },
+  { name: 'fgets', kind: 'function', sig: 'char *fgets(char *buf, int n, FILE *stream)', params: [{ label: 'buf', doc: 'destination buffer' }, { label: 'n', doc: 'buffer size (reads at most n-1 chars)' }, { label: 'stream', doc: 'input stream, usually stdin' }], doc: 'Read a line safely (bounded). Keeps the trailing `\\n` if it fits — strip with `buf[strcspn(buf, "\\n")] = 0;`. Returns NULL on EOF.', example: 'char line[256];\nif (fgets(line, sizeof line, stdin))\n    line[strcspn(line, "\\n")] = 0;', header: '#include <stdio.h>', returns: 'char * — buf on success, or NULL at end of file / error with nothing read', learn: {
+    summary: "read one line of text safely",
+    what: "fgets reads one line from a stream (usually stdin) into a character array that you provide. It stops after the newline, at the end of the input, or when the array is full, whichever comes first, so it can never write past the end of your buffer; that is what makes it \"safe\". The result is a normal C string ending in '\\0'. If the whole line fit, the newline character \\n is kept at the end of the string.",
+    params: {
+      buf: "the char array that receives the line: declare char line[256]; and pass line",
+      n: "the size of that array, e.g. sizeof line. fgets stores at most n-1 characters plus the terminating '\\0'",
+      stream: "where to read from: pass stdin for the program's input"
+    },
+    returns: "buf (the same pointer you passed) on success, or NULL if nothing could be read because the input had ended. Use it as a test: if (fgets(line, sizeof line, stdin) != NULL) { ... }.",
+    example: "char line[100];                            // room for 99 chars + '\\0'\nif (fgets(line, sizeof line, stdin)) {     // read a line; NULL means no input\n    printf(\"%zu bytes\\n\", strlen(line));   // the count includes the '\\n'\n}",
+    watch: [
+      "The trailing \\n is kept: \"cat\" arrives as \"cat\\n\". Remove it with line[strcspn(line, \"\\n\")] = 0;",
+      "A line longer than the buffer is cut: the rest stays waiting for the next read.",
+      "Pass the real buffer size; sizeof only works on an actual array, not on a pointer."
+    ]
+  }  },
   { name: 'fputs', kind: 'function', sig: 'int fputs(const char *s, FILE *stream)', params: [{ label: 's', doc: 'string' }, { label: 'stream', doc: 'output stream' }], doc: 'Write *s* to *stream* without adding a newline.', header: '#include <stdio.h>', returns: 'int — a non-negative value on success, or EOF on error', example: 'fputs("error: bad input\\n", stderr);' },
   { name: 'fprintf', kind: 'function', sig: 'int fprintf(FILE *stream, const char *format, ...)', params: [{ label: 'stream', doc: 'output stream, e.g. stderr' }, { label: 'format', doc: 'format string' }], doc: 'Like `printf` but to a given stream. `fprintf(stderr, ...)` for debug output that does not pollute stdout.', header: '#include <stdio.h>', returns: 'int — number of characters written, or a negative value on error', example: 'fprintf(stderr, "bad value: %d\\n", x);' },
-  { name: 'sprintf', kind: 'function', sig: 'int sprintf(char *buf, const char *format, ...)', params: [{ label: 'buf', doc: 'destination buffer' }, { label: 'format', doc: 'format string' }], doc: 'Format into a buffer; returns chars written. **Unbounded** — can overflow *buf*; prefer `snprintf`.', header: '#include <stdio.h>', returns: 'int — number of characters written (excluding the terminating \'\\0\')', example: 'char buf[32];\nsprintf(buf, "%d-%d", a, b);' },
+  { name: 'sprintf', kind: 'function', sig: 'int sprintf(char *buf, const char *format, ...)', params: [{ label: 'buf', doc: 'destination buffer' }, { label: 'format', doc: 'format string' }], doc: 'Format into a buffer; returns chars written. **Unbounded** — can overflow *buf*; prefer `snprintf`.', header: '#include <stdio.h>', returns: 'int — number of characters written (excluding the terminating \'\\0\')', example: 'char buf[32];\nsprintf(buf, "%d-%d", a, b);', learn: {
+    summary: "print formatted text into a string",
+    what: "sprintf works exactly like printf, but instead of showing the text it writes it into a character array you provide, ending with '\\0'. Use it to build strings out of numbers and other values, for example turning an int into its decimal digits or assembling a label. It returns how many characters it wrote, which tells you where the text ends.",
+    params: {
+      buf: "the char array to write into; it must be big enough for the whole result plus the '\\0'",
+      format: "the template with % placeholders, as in printf, e.g. \"img_%03d.png\"",
+      "...": "the values for the placeholders, in order"
+    },
+    returns: "The number of characters written, not counting the '\\0'. buf + that number points just past the text.",
+    example: "char name[32];                             // destination buffer\nint n = sprintf(name, \"img_%03d.png\", 7);  // name is now \"img_007.png\"\nprintf(\"%s (%d chars)\\n\", name, n);        // img_007.png (11 chars)",
+    watch: [
+      "No bounds checking: a result longer than buf overwrites other memory. snprintf(buf, sizeof buf, ...) is the safe variant.",
+      "Don't use the same buffer as both the destination and a %s argument."
+    ]
+  }  },
   { name: 'snprintf', kind: 'function', sig: 'int snprintf(char *buf, size_t size, const char *format, ...)', params: [{ label: 'buf', doc: 'destination buffer' }, { label: 'size', doc: 'buffer capacity including the terminator' }, { label: 'format', doc: 'format string' }], doc: 'Bounded `sprintf`: always null-terminates (if size > 0). Returns the length that *would* have been written — `snprintf(NULL, 0, ...)` measures.', example: 'char buf[32];\nsnprintf(buf, sizeof buf, "%d->%d", a, b);', header: '#include <stdio.h>', returns: 'int — number of characters that would have been written if size were large enough (excluding \'\\0\'); >= size means truncation' },
   { name: 'sscanf', kind: 'function', sig: 'int sscanf(const char *str, const char *format, ...)', params: [{ label: 'str', doc: 'source string' }, { label: 'format', doc: 'format string' }], doc: 'Like `scanf` but parses from a string. Returns the number of items matched.', example: 'int h, m;\nsscanf("12:34", "%d:%d", &h, &m);', header: '#include <stdio.h>', returns: 'int — number of items successfully assigned, or EOF if input ends before the first conversion' },
   { name: 'EOF', kind: 'constant', sig: '#define EOF (-1)', doc: 'Negative value returned by input functions at end of file or on error.', header: '#include <stdio.h>', example: 'int c;\nwhile ((c = getchar()) != EOF)\n    putchar(c);' },
-  { name: 'stdin', kind: 'constant', sig: 'FILE *stdin', doc: 'Standard input stream.', header: '#include <stdio.h>', example: 'char line[256];\nfgets(line, sizeof line, stdin);' },
+  { name: 'stdin', kind: 'constant', sig: 'FILE *stdin', doc: 'Standard input stream.', header: '#include <stdio.h>', example: 'char line[256];\nfgets(line, sizeof line, stdin);', learn: {
+    summary: "the program's input stream",
+    what: "stdin (\"standard input\") is a ready-made variable that stands for where your program's input comes from: the keyboard, or the test data the judge feeds in. It is a stream: think of a queue of characters that you read from the front; once read they are gone, and the next read continues where the last one stopped. Its type, FILE *, is a pointer to the C library's bookkeeping for that stream. You never create or close it; you just pass it to reading functions such as fgets, fgetc or fscanf.",
+    example: "int c = fgetc(stdin);           // read one character from the input\nif (c == EOF) return 0;         // EOF means the input has run out\nprintf(\"first char: %c\\n\", c);  // show the character we got",
+    watch: [
+      "Never fclose(stdin) or assign to it.",
+      "Reads that hit the end of input return a special value (EOF for fgetc, NULL for fgets): check for it."
+    ]
+  }  },
   { name: 'stdout', kind: 'constant', sig: 'FILE *stdout', doc: 'Standard output stream (buffered).', header: '#include <stdio.h>', example: 'fprintf(stdout, "%d\\n", ans);\nfflush(stdout);' },
   { name: 'stderr', kind: 'constant', sig: 'FILE *stderr', doc: 'Standard error stream (unbuffered); use for debug prints.', header: '#include <stdio.h>', example: 'fprintf(stderr, "warning: n=%d\\n", n);' },
 
@@ -67,11 +132,53 @@ export default [
   { name: 'fscanf', kind: 'function', sig: 'int fscanf(FILE *stream, const char *format, ...)', params: [{ label: 'stream', doc: 'input stream' }, { label: 'format', doc: 'conversion spec like scanf' }], returns: 'int — number of items successfully assigned, or EOF if input ends before the first conversion', doc: 'Like `scanf` but reads from *stream*. Compare the return value with the number of conversions you expect.', example: 'int x, y;\nwhile (fscanf(f, "%d %d", &x, &y) == 2)\n    sum += x * y;', header: '#include <stdio.h>' },
   { name: 'perror', kind: 'function', sig: 'void perror(const char *s)', params: [{ label: 's', doc: 'prefix message (often the file or function name)' }], returns: 'void', doc: 'Print *s*, a colon, and the text for the current `errno` to `stderr`. Call it right after the failing function, before anything else changes `errno`.', example: 'FILE *f = fopen("in.txt", "r");\nif (!f) { perror("in.txt"); return 1; }', header: '#include <stdio.h>' },
   // ───────────── stdlib.h ─────────────
-  { name: 'malloc', kind: 'function', sig: 'void *malloc(size_t size)', params: [{ label: 'size', doc: 'bytes to allocate' }], doc: 'Allocate *size* bytes of **uninitialised** heap memory; returns NULL on failure. Always multiply by `sizeof`. LeetCode returns arrays this way and expects you to set `*returnSize`.', example: 'int *res = malloc(n * sizeof(int));\n*returnSize = n;\nreturn res;', insert: 'malloc(${1:n} * sizeof(${2:int}))', header: '#include <stdlib.h>', returns: 'void * — pointer to uninitialized memory, or NULL on failure' },
-  { name: 'calloc', kind: 'function', sig: 'void *calloc(size_t count, size_t size)', params: [{ label: 'count', doc: 'number of elements' }, { label: 'size', doc: 'size of each element' }], doc: 'Allocate an array of *count* elements, **zero-initialised**. Great for counters/visited arrays.', example: 'int *cnt = calloc(26, sizeof(int));', insert: 'calloc(${1:n}, sizeof(${2:int}))', header: '#include <stdlib.h>', returns: 'void * — pointer to zero-filled memory, or NULL on failure' },
+  { name: 'malloc', kind: 'function', sig: 'void *malloc(size_t size)', params: [{ label: 'size', doc: 'bytes to allocate' }], doc: 'Allocate *size* bytes of **uninitialised** heap memory; returns NULL on failure. Always multiply by `sizeof`. LeetCode returns arrays this way and expects you to set `*returnSize`.', example: 'int *res = malloc(n * sizeof(int));\n*returnSize = n;\nreturn res;', insert: 'malloc(${1:n} * sizeof(${2:int}))', header: '#include <stdlib.h>', returns: 'void * — pointer to uninitialized memory, or NULL on failure', learn: {
+    summary: "request a block of memory at runtime",
+    what: "malloc (\"memory allocate\") asks for a block of size bytes on the heap: memory that stays valid until you free it, unlike local arrays that vanish when their function returns. Use it when a size is only known while the program runs, or when a function must hand an array back to its caller. You get a pointer to the start of the block; its contents are leftover garbage until you write to them. Compute the byte count with sizeof: n * sizeof(int) for n ints.",
+    params: {
+      size: "the number of bytes wanted, e.g. n * sizeof(int) for an array of n ints"
+    },
+    returns: "A pointer to the new block (void *, which converts to any pointer type such as int *), or NULL if memory ran out. Release it later with free(ptr).",
+    example: "int n = 5;                                  // size decided at runtime\nint *sq = malloc(n * sizeof(int));          // room for 5 ints\nfor (int i = 0; i < n; i++) sq[i] = i * i;  // fill: 0 1 4 9 16\nfree(sq);                                   // give the memory back",
+    watch: [
+      "malloc(n) gives n bytes, not n ints: multiply by sizeof.",
+      "The memory is not zeroed; use calloc when you need zeros.",
+      "Every malloc should eventually be matched by exactly one free (unless you return the block to a caller who frees it)."
+    ]
+  }  },
+  { name: 'calloc', kind: 'function', sig: 'void *calloc(size_t count, size_t size)', params: [{ label: 'count', doc: 'number of elements' }, { label: 'size', doc: 'size of each element' }], doc: 'Allocate an array of *count* elements, **zero-initialised**. Great for counters/visited arrays.', example: 'int *cnt = calloc(26, sizeof(int));', insert: 'calloc(${1:n}, sizeof(${2:int}))', header: '#include <stdlib.h>', returns: 'void * — pointer to zero-filled memory, or NULL on failure', learn: {
+    summary: "allocate memory already filled with zeros",
+    what: "calloc (\"clear allocate\") is like malloc, but you give the element count and element size separately and every byte of the block is set to zero. That makes it ideal for counters, flags and tables that must start empty: an int array from calloc starts as all 0, an array of pointers as all NULL. It also checks that count * size doesn't overflow.",
+    params: {
+      count: "how many elements, e.g. 26 for one counter per letter",
+      size: "the size of one element in bytes, e.g. sizeof(int)"
+    },
+    returns: "A pointer to the zero-filled block, or NULL if memory ran out. Free it with free(ptr) when done.",
+    example: "int *seen = calloc(26, sizeof(int));            // 26 counters, all 0\nconst char *w = \"banana\";                       // text to tally\nfor (int i = 0; w[i]; i++) seen[w[i] - 'a']++;  // count each letter\nprintf(\"%d\\n\", seen['a' - 'a']);                // 3 (three a's)\nfree(seen);                                     // release the memory",
+    watch: [
+      "Zero means 0 for ints and NULL for pointers. If 0 can be a real value in a table, you need a separate \"empty\" marker.",
+      "Still check for NULL and free the block later; zeroed memory is otherwise ordinary heap memory."
+    ]
+  }  },
   { name: 'realloc', kind: 'function', sig: 'void *realloc(void *ptr, size_t size)', params: [{ label: 'ptr', doc: 'previous allocation (or NULL)' }, { label: 'size', doc: 'new size in bytes' }], doc: 'Resize an allocation, possibly moving it; contents preserved up to the old size. Double capacity for amortised **O(1)** push. On failure returns NULL and the old block is still valid.', example: 'if (len == cap) {\n    cap *= 2;\n    a = realloc(a, cap * sizeof *a);\n}', header: '#include <stdlib.h>', returns: 'void * — pointer to the resized block (may have moved), or NULL on failure (original block still valid)' },
   { name: 'free', kind: 'function', sig: 'void free(void *ptr)', params: [{ label: 'ptr', doc: 'pointer from malloc/calloc/realloc (NULL is a no-op)' }], doc: 'Release heap memory. Don\'t free the array you return to the judge, and never use or free a pointer twice.', header: '#include <stdlib.h>', returns: 'void', example: 'int *a = malloc(n * sizeof *a);\n/* ... use a ... */\nfree(a);\na = NULL;' },
-  { name: 'qsort', kind: 'function', sig: 'void qsort(void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *))', params: [{ label: 'base', doc: 'array to sort' }, { label: 'nmemb', doc: 'number of elements' }, { label: 'size', doc: 'size of each element' }, { label: 'compar', doc: 'returns <0, 0, >0 for a<b, a==b, a>b' }], doc: 'Sort an array in place, **O(n log n)** average, not stable. Gotcha: `return a - b` can overflow — use `(a > b) - (a < b)`.', example: 'int cmp(const void *a, const void *b) {\n    int x = *(const int *)a, y = *(const int *)b; return (x > y) - (x < y);\n}\nqsort(arr, n, sizeof(int), cmp);', insert: 'qsort(${1:arr}, ${2:n}, sizeof(${3:int}), ${4:cmp});', header: '#include <stdlib.h>', returns: 'void (base is sorted in place)' },
+  { name: 'qsort', kind: 'function', sig: 'void qsort(void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *))', params: [{ label: 'base', doc: 'array to sort' }, { label: 'nmemb', doc: 'number of elements' }, { label: 'size', doc: 'size of each element' }, { label: 'compar', doc: 'returns <0, 0, >0 for a<b, a==b, a>b' }], doc: 'Sort an array in place, **O(n log n)** average, not stable. Gotcha: `return a - b` can overflow — use `(a > b) - (a < b)`.', example: 'int cmp(const void *a, const void *b) {\n    int x = *(const int *)a, y = *(const int *)b; return (x > y) - (x < y);\n}\nqsort(arr, n, sizeof(int), cmp);', insert: 'qsort(${1:arr}, ${2:n}, sizeof(${3:int}), ${4:cmp});', header: '#include <stdlib.h>', returns: 'void (base is sorted in place)', learn: {
+    summary: "sort any array with a comparison function",
+    what: "qsort sorts an array in place, meaning it rearranges the original array. C has no generics, so qsort doesn't know what your elements are: you tell it where the array starts, how many elements there are, how big each one is, and give it a comparison function. qsort calls that function with pointers to two elements, and the function answers negative if the first should come first, positive if the second should, and 0 if they are equal. Typical time is O(n log n).",
+    params: {
+      base: "the array to sort, e.g. scores",
+      nmemb: "the number of elements, e.g. n",
+      size: "the size of one element in bytes, e.g. sizeof scores[0]",
+      compar: "the name of your comparison function, e.g. cmp_desc, without parentheses: you pass the function itself"
+    },
+    returns: "Nothing (void). Afterwards the array is sorted in place.",
+    example: "int cmp_desc(const void *a, const void *b) {       // compares two ints\n    int x = *(const int *)a, y = *(const int *)b;  // turn the pointers back into ints\n    return (y > x) - (y < x);                      // bigger first = descending\n}                                                  // end of the comparator\nqsort(scores, n, sizeof scores[0], cmp_desc);      // sort scores high to low",
+    watch: [
+      "return x - y can overflow for large ints; use (x > y) - (x < y) instead.",
+      "The comparator receives pointers to elements, not the elements: cast and dereference them.",
+      "size is the size of one element, not of the whole array."
+    ]
+  }  },
   { name: 'bsearch', kind: 'function', sig: 'void *bsearch(const void *key, const void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *))', params: [{ label: 'key', doc: 'pointer to the value sought' }, { label: 'base', doc: 'sorted array' }, { label: 'nmemb', doc: 'number of elements' }, { label: 'size', doc: 'element size' }, { label: 'compar', doc: 'same comparator as qsort' }], doc: 'Binary search a sorted array, **O(log n)**. Returns a pointer to *a* matching element or NULL — no lower_bound semantics; hand-roll that.', example: 'int *p = bsearch(&target, arr, n, sizeof(int), cmp);\nif (p) idx = p - arr;', header: '#include <stdlib.h>', returns: 'void * — pointer to a matching element, or NULL if not found' },
   { name: 'abs', kind: 'function', sig: 'int abs(int n)', params: [{ label: 'n', doc: 'integer' }], doc: 'Absolute value of an `int`. `abs(INT_MIN)` overflows. Use `llabs` for long long and `fabs` for double.', header: '#include <stdlib.h>', returns: 'int — |n| (undefined for INT_MIN)', example: 'int d = abs(a - b);' },
   { name: 'labs', kind: 'function', sig: 'long labs(long n)', params: [{ label: 'n', doc: 'long integer' }], doc: 'Absolute value of a `long`.', header: '#include <stdlib.h>', returns: 'long — |n|', example: 'long d = labs(x - y);' },
@@ -108,7 +215,20 @@ export default [
   { name: 'strndup', kind: 'function', sig: 'char *strndup(const char *s, size_t n)', params: [{ label: 's', doc: 'string to copy' }, { label: 'n', doc: 'max chars' }], doc: 'Malloc-ed copy of at most *n* chars, always null-terminated — handy for substrings.', header: '#include <string.h>', returns: 'char * — a malloc\'d copy of at most n chars, \'\\0\'-terminated, or NULL on failure', example: 'char *word = strndup(s + start, len);\nfree(word);' },
   { name: 'strtok', kind: 'function', sig: 'char *strtok(char *str, const char *delim)', params: [{ label: 'str', doc: 'string to split (NULL on later calls)' }, { label: 'delim', doc: 'set of delimiter characters' }], doc: 'Split a string into tokens, **modifying** it. Pass the string first, then NULL to continue. Not reentrant; can\'t be used on string literals.', example: 'for (char *t = strtok(s, " "); t; t = strtok(NULL, " "))\n    puts(t);', header: '#include <string.h>', returns: 'char * — pointer to the next token, or NULL when no tokens remain' },
   { name: 'strspn', kind: 'function', sig: 'size_t strspn(const char *s, const char *accept)', params: [{ label: 's', doc: 'string' }, { label: 'accept', doc: 'allowed characters' }], doc: 'Length of the initial run of *s* made only of chars in *accept*.', header: '#include <string.h>', returns: 'size_t — length of the leading run of characters that are all in accept', example: 'size_t ws = strspn(s, " \\t");  // count leading blanks' },
-  { name: 'strcspn', kind: 'function', sig: 'size_t strcspn(const char *s, const char *reject)', params: [{ label: 's', doc: 'string' }, { label: 'reject', doc: 'stop characters' }], doc: 'Length of the initial run of *s* containing none of *reject*. Idiom to strip a newline: `s[strcspn(s, "\\n")] = 0;`.', header: '#include <string.h>', returns: 'size_t — length of the leading run containing no character from reject', example: 'buf[strcspn(buf, "\\n")] = \'\\0\';  // strip newline from fgets' },
+  { name: 'strcspn', kind: 'function', sig: 'size_t strcspn(const char *s, const char *reject)', params: [{ label: 's', doc: 'string' }, { label: 'reject', doc: 'stop characters' }], doc: 'Length of the initial run of *s* containing none of *reject*. Idiom to strip a newline: `s[strcspn(s, "\\n")] = 0;`.', header: '#include <string.h>', returns: 'size_t — length of the leading run containing no character from reject', example: 'buf[strcspn(buf, "\\n")] = \'\\0\';  // strip newline from fgets', learn: {
+    summary: "count characters before any listed one",
+    what: "strcspn scans the string s from the start and counts how many characters go by before it reaches any character that appears in reject. In other words it returns the index of the first \"stop\" character, or the length of s if none appears. Its most common job is finding the newline that fgets leaves at the end of a line, so you can cut the string there by writing a '\\0' (the end-of-string marker) at that index.",
+    params: {
+      s: "the string to scan, e.g. \"abc123\"",
+      reject: "a string listing the characters to stop at, e.g. \"0123456789\" (any digit) or \"\\n\" (a newline)"
+    },
+    returns: "A size_t (a non-negative count): the position of the first matching character, or strlen(s) if there is none. Use it as an index into s.",
+    example: "const char *code = \"abc123\";             // a sample string\nsize_t i = strcspn(code, \"0123456789\");  // stop at the first digit\nprintf(\"%zu\\n\", i);                      // 3: \"abc\" comes before '1'\nchar pair[] = \"key;value\";               // a writable copy\npair[strcspn(pair, \";\")] = 0;            // cut at ';' -> pair is \"key\"",
+    watch: [
+      "reject is a set of characters, not a word: strcspn(s, \"ab\") stops at the first a or b.",
+      "It returns a count, not a pointer: use it as s[i]."
+    ]
+  }  },
   { name: 'memset', kind: 'function', sig: 'void *memset(void *ptr, int value, size_t n)', params: [{ label: 'ptr', doc: 'memory to fill' }, { label: 'value', doc: 'byte value (converted to unsigned char)' }, { label: 'n', doc: 'number of bytes' }], doc: 'Fill *n* **bytes**. Works for 0 and -1 on int arrays, but `memset(a, 1, n*sizeof(int))` makes each int 0x01010101, not 1.', example: 'memset(dp, 0, sizeof(int) * n);\nmemset(dist, 0x3f, sizeof dist); // ~1e9 "infinity"', header: '#include <string.h>', returns: 'void * — ptr' },
   { name: 'memcpy', kind: 'function', sig: 'void *memcpy(void *dest, const void *src, size_t n)', params: [{ label: 'dest', doc: 'destination' }, { label: 'src', doc: 'source' }, { label: 'n', doc: 'bytes to copy' }], doc: 'Copy *n* bytes. Regions must **not overlap** — use `memmove` if they might.', example: 'memcpy(copy, arr, n * sizeof(int));', header: '#include <string.h>', returns: 'void * — dest' },
   { name: 'memmove', kind: 'function', sig: 'void *memmove(void *dest, const void *src, size_t n)', params: [{ label: 'dest', doc: 'destination' }, { label: 'src', doc: 'source' }, { label: 'n', doc: 'bytes to copy' }], doc: 'Copy *n* bytes, safe for overlapping regions (e.g. shifting elements within one array).', example: 'memmove(a + i + 1, a + i, (n - i) * sizeof(int)); // insert gap', header: '#include <string.h>', returns: 'void * — dest' },

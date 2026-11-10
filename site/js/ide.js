@@ -604,10 +604,14 @@ function entriesIn(d, text, lang) {
     const member = !!m[1], called = !!m[3];
     const cands = (d.byName.get(m[2]) || []).filter((e) => INTRO_KINDS.has(e.kind) && e.kind !== 'instruction' && (CALLABLE.has(e.kind) ? called : true));
     if (!cands.length) continue;
-    const pool = cands.filter((e) => (e.kind === 'method') === member);
-    // Module members (math.e, std::io::stdin) only count when written qualified.
-    const list = (pool.length ? pool : member ? [] : cands.filter((e) => e.kind !== 'method'))
-      .filter((e) => e.kind === 'method' || member || globals.includes(normOwner(e.owner)));
+    // The identifier written before `.` / `::`, e.g. `stdin` in sys.stdin.read().
+    const qual = member ? (text.slice(0, m.index).match(/([A-Za-z_]\w*)\s*(?:<[^<>]*>)?\s*$/)?.[1] || '').toLowerCase() : '';
+    const ownerTail = (e) => (e.owner || '').replace(/<.*$/, '').split(/::|\./).pop().toLowerCase();
+    const list = cands.filter((e) => {
+      if (e.kind === 'method') return member;
+      if (!e.owner || globals.includes(normOwner(e.owner))) return !member || ownerTail(e) === qual;
+      return member && ownerTail(e) === qual; // module members (math.e, io::stdin) only when qualified
+    });
     if (!list.length) continue;
     out.add(list.find((e) => e.owner && new RegExp(`\\b${e.owner.replace(/^std::/, '').replace(/<.*$/, '').replace(/[^\w]/g, '')}\\b`, 'i').test(text)) || list[0]);
   }
@@ -632,16 +636,36 @@ export async function introducedEntries(problems, problem, lang, textOf) {
   return [...seen].filter(([, id]) => id === problem.id).map(([e]) => e).slice(0, 8);
 }
 
-/** Markdown card for the description panel. */
+/**
+ * Markdown card for the description panel: a beginner-oriented explanation built
+ * from the entry's `learn` block (plain English per parameter, return value,
+ * commented example, pitfalls), falling back to the terse hover docs.
+ */
 export function entryCard(lang, e) {
   const dl = lang === 'asm' ? 'arm64' : lang;
+  const L = e.learn || {};
   const from = providedBy(dl, e);
-  const q = e.owner ? `${e.owner}${SEP[dl] || '::'}${e.name}` : e.name;
-  return [
-    `**\`${q}\`**${from ? ` · from \`${from}\`` : ''}`,
-    fence(dl, e.sig || e.name),
-    e.doc || '',
-    e.returns ? `**Returns** ${e.returns}` : '',
-    e.example ? '**Usage**\n' + fence(dl, e.example) : '',
-  ].filter(Boolean).join('\n\n');
+  const q = e.owner && e.kind === 'method' ? `${e.owner}${SEP[dl] || '::'}${e.name}` : e.name;
+  const out = [`#### \`${q}\`${L.summary ? ` — ${L.summary}` : ''}`];
+  if (from) out.push(`<span class="intro-from">from \`${from}\`${e.header ? ` · add \`${e.header}\` at the top` : ''}</span>`);
+  out.push(L.what || e.doc || '');
+  out.push('**How to write it**\n' + fence(dl, e.sig || e.name));
+  const args = sigArgs(e.sig || '');
+  const parts = L.params ? Object.entries(L.params) : (e.params || []).map((p) => [p.label, p.doc]);
+  if (parts.length) {
+    const rows = parts.map(([label, text]) => {
+      const decl = args.find((a) => new RegExp(`(^|[^\\w])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\w]|$)`).test(a)) || '';
+      const type = decl && decl !== label ? decl.replace(new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`), '').replace(/[:=]\s*$/, '').trim() : '';
+      return { label, type, text: String(text).replace(/\n/g, ' ').replace(/\|/g, '\\|') };
+    });
+    const typed = rows.some((r) => r.type);
+    out.push(typed
+      ? `| Part | Type | What it means |\n|---|---|---|\n${rows.map((r) => `| \`${r.label}\` | ${r.type ? `\`${r.type}\`` : ''} | ${r.text} |`).join('\n')}`
+      : `| Part | What it means |\n|---|---|\n${rows.map((r) => `| \`${r.label}\` | ${r.text} |`).join('\n')}`);
+  }
+  if (L.returns || e.returns) out.push(`**What you get back:** ${L.returns || e.returns}`);
+  const ex = L.example || e.example;
+  if (ex) out.push('**Example**\n' + fence(dl, ex));
+  if (L.watch?.length) out.push('**Watch out**\n' + L.watch.map((w) => `- ${w}`).join('\n'));
+  return out.filter(Boolean).join('\n\n');
 }

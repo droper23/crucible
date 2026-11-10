@@ -6,7 +6,7 @@ const P = (s) => s.split('|').map((x) => {
   return { label: x.slice(0, i).trim(), doc: x.slice(i + 1).trim() };
 });
 
-// e(kind, owner, name, sig, doc, extra?)  -- extra: { params, returns, example, insert, header }
+// e(kind, owner, name, sig, doc, extra?)  -- extra: { params, returns, example, insert, header, learn }
 function e(kind, owner, name, sig, doc, extra = {}) {
   const o = { name };
   if (owner) o.owner = owner;
@@ -18,6 +18,7 @@ function e(kind, owner, name, sig, doc, extra = {}) {
   if (extra.example) o.example = extra.example;
   if (extra.insert) o.insert = extra.insert;
   if (extra.header) o.header = extra.header;
+  if (extra.learn) o.learn = extra.learn;
   return o;
 }
 const K = (name, sig, doc, extra) => e('keyword', null, name, sig, doc, extra);
@@ -26,7 +27,7 @@ const M = (owner, name, sig, doc, extra) => e('method', owner, name, sig, doc, e
 const F = (owner, name, sig, doc, extra = {}) =>
   e('function', owner, name, sig, doc, { header: `import ${owner.split('.')[0]}`, ...extra });
 
-export default [
+const entries = [
   // ===================== keywords =====================
   K('def', 'def name(params) -> T:', 'Define a function. Default values are evaluated **once** at definition time: never use a mutable default like `def f(a=[])`.', {
     example: 'def solve(nums: list[int]) -> int:\n    return sum(nums)', insert: 'def ${1:name}(${2:args}):\n\t${0:pass}' }),
@@ -77,9 +78,36 @@ export default [
 
   // ===================== builtins =====================
   B('print', 'print(*objects, sep=" ", end="\\n", file=sys.stdout, flush=False) -> None', 'Print objects separated by *sep*, followed by *end*. For many lines, build a list and `print("\\n".join(out))` — much faster.', {
-    params: '*objects: values to print|sep: separator (default space)|end: terminator (default newline)|file: output stream|flush: force flush', insert: 'print(${1})', returns: 'None — writes the text to *file*', example: 'print(1, 2, 3, sep=", ")  # 1, 2, 3\nprint("no newline", end="")' }),
+    params: '*objects: values to print|sep: separator (default space)|end: terminator (default newline)|file: output stream|flush: force flush', insert: 'print(${1})', returns: 'None — writes the text to *file*', example: 'print(1, 2, 3, sep=", ")  # 1, 2, 3\nprint("no newline", end="")', learn: {
+      summary: "show text on the screen",
+      what: "print writes values to standard output: the text your program shows, which is also what the judge reads to check your answer. You can pass several values separated by commas; print puts a space between them and a newline (line break) after the last one, so each print call produces one line. Values that are not text, such as numbers, are converted to text automatically.",
+      params: {
+        "*objects": "the things to show, separated by commas, e.g. print(\"score:\", 42)",
+        sep: "optional text placed between the values; default is one space. print(1, 2, sep=\"-\") shows 1-2",
+        end: "optional text added after the last value; default is a newline \"\\n\". end=\"\" keeps the next print on the same line"
+      },
+      returns: "Nothing useful (None). print is used for its effect: the text appearing in the output.",
+      example: "print(\"Total:\", 3 + 4)       # Total: 7\nprint(\"a\", \"b\", sep=\", \")    # a, b\nprint(\"no newline\", end=\"\")  # next output continues on this line",
+      watch: [
+        "Spelling, capitals, spaces and punctuation must match the expected output exactly: the judge compares character by character.",
+        "print adds a space between values: print(\"x\", \"=\", 1) shows x = 1. Use an f-string like print(f\"x={x}\") for full control."
+      ]
+    }  }),
   B('input', 'input(prompt="") -> str', 'Read one line from stdin without the trailing newline. Raises `EOFError` at end of input. For large inputs prefer `sys.stdin.readline` or `sys.stdin.read().split()`.', {
-    params: 'prompt: text written before reading', example: 'n = int(input())\nnums = list(map(int, input().split()))', returns: 'str — the line read, without the trailing newline' }),
+    params: 'prompt: text written before reading', example: 'n = int(input())\nnums = list(map(int, input().split()))', returns: 'str — the line read, without the trailing newline', learn: {
+      summary: "read one line of typed input",
+      what: "input() waits for the next line of text on standard input (the keyboard, or the test data the judge feeds in) and gives it to you as a string. The newline at the end of the line (the Enter key) is removed for you. Each call reads the next line, so calling it twice reads two lines. The result is always text: even if the line is 42 you get the string \"42\".",
+      params: {
+        prompt: "optional message shown before reading, e.g. input(\"Name? \"). Leave it out in judged problems: the prompt is printed and would count as wrong output"
+      },
+      returns: "A str holding the line, without its trailing newline. Store it in a variable: line = input().",
+      example: "city = input()       # reads e.g. Paris\nprint(len(city))     # 5, the number of characters\nprint(city.upper())  # PARIS",
+      watch: [
+        "Don't pass a prompt like input(\"Enter: \") here: the prompt is printed to the output and the answer will not match.",
+        "The result is a string; convert it with int(...) before doing arithmetic.",
+        "Calling input() when there is no more input raises EOFError."
+      ]
+    }  }),
   B('len', 'len(s) -> int', 'Number of items in a container. **O(1)**.', { params: 's: sequence or collection', insert: 'len(${1:s})', returns: 'int — number of items', example: 'len([3, 1, 2])  # 3\nlen("hello")  # 5' }),
   B('range', 'range(start, stop, step=1) -> range', 'Lazy arithmetic sequence `start, start+step, ...` up to but **excluding** *stop*. `range(n)` is `0..n-1`; count down with `range(n - 1, -1, -1)`.', {
     params: 'start: first value (default 0)|stop: exclusive end|step: increment, may be negative', insert: 'range(${1:n})', returns: 'range — lazy immutable sequence (O(1) memory; supports len, indexing, `in`)', example: 'list(range(5))  # [0, 1, 2, 3, 4]\nlist(range(10, 0, -3))  # [10, 7, 4, 1]' }),
@@ -101,7 +129,20 @@ export default [
   B('any', 'any(iterable) -> bool', 'True if any item is truthy (short-circuits); `False` for empty.', { params: 'iterable: items to test', returns: 'bool — True if at least one item is truthy', example: 'any(x < 0 for x in [3, -1, 2])  # True\nany([])  # False' }),
   B('all', 'all(iterable) -> bool', 'True if every item is truthy (short-circuits); `True` for empty.', { params: 'iterable: items to test', returns: 'bool — True if no item is falsy (True for empty input)', example: 'all(c.isdigit() for c in "123")  # True\nall([])  # True' }),
   B('int', 'int(x=0, base=10) -> int', 'Convert to integer; truncates floats toward zero. `int("ff", 16)` parses other bases. Python ints are arbitrary precision (no overflow).', {
-    params: 'x: number or string|base: base for string input', returns: 'int — converted value; ValueError for an invalid string', example: 'int("42")  # 42\nint(-3.7)  # -3\nint("ff", 16)  # 255' }),
+    params: 'x: number or string|base: base for string input', returns: 'int — converted value; ValueError for an invalid string', example: 'int("42")  # 42\nint(-3.7)  # -3\nint("ff", 16)  # 255', learn: {
+      summary: "turn text or a float into a whole number",
+      what: "int converts a value into an integer (a whole number). Its main use is turning text you read, like \"42\", into a number you can do math with: input() always gives text, and \"4\" + \"2\" is \"42\", not 6. It also chops the fractional part off a float: int(3.9) is 3. Python integers have no size limit.",
+      params: {
+        x: "the value to convert, e.g. int(\"17\") or int(3.9). Text may have surrounding spaces and a leading minus sign",
+        base: "optional number base for text; default 10. int(\"101\", 2) reads binary and gives 5"
+      },
+      returns: "An int. Store it, then compute with it: n = int(text).",
+      example: "age = int(\"17\")       # the text \"17\" becomes the number 17\nprint(age + 1)        # 18 (math works now)\nprint(int(-2.7))      # -2: the fraction is dropped, toward zero\nprint(int(\"101\", 2))  # 5: \"101\" read as binary",
+      watch: [
+        "int(\"3.5\") and int(\"12abc\") raise ValueError: the text must be a whole number.",
+        "int(\"3 4\") fails too: split the line first, then convert each piece."
+      ]
+    }  }),
   B('float', 'float(x=0.0) -> float', 'Convert to a 64-bit float. `float("inf")` is infinity. Floats are inexact: compare with tolerance.', { params: 'x: number or string', returns: 'float — converted value; ValueError for an invalid string', example: 'float("3.5")  # 3.5\nbest = float("inf")' }),
   B('str', 'str(object="") -> str', 'String representation. Strings are **immutable**; build with a list and `"".join`.', { params: 'object: value to convert', returns: 'str — the printable form of *object*', example: 'str(42)  # \'42\'\n"".join(str(d) for d in [1, 2, 3])  # \'123\'' }),
   B('list', 'list(iterable=()) -> list', 'New list from an iterable. Gotcha: `[[0] * m] * n` shares one row n times; use `[[0] * m for _ in range(n)]`.', { params: 'iterable: items', returns: 'list — a new list (shallow copy of the items)', example: 'list("abc")  # [\'a\', \'b\', \'c\']\ngrid = [[0] * m for _ in range(n)]' }),
@@ -144,7 +185,21 @@ export default [
 
   // ===================== str methods =====================
   M('str', 'split', 'str.split(sep=None, maxsplit=-1) -> list[str]', 'Split into a list. With no *sep*, splits on runs of whitespace and drops empties; `"a,,b".split(",")` keeps the empty string.', {
-    params: 'sep: delimiter (None = whitespace)|maxsplit: max number of splits', insert: 'split(${1})', returns: 'list[str]', example: '"a b  c".split()  # [\'a\', \'b\', \'c\']\n"1,2,,3".split(",")  # [\'1\', \'2\', \'\', \'3\']' }),
+    params: 'sep: delimiter (None = whitespace)|maxsplit: max number of splits', insert: 'split(${1})', returns: 'list[str]', example: '"a b  c".split()  # [\'a\', \'b\', \'c\']\n"1,2,,3".split(",")  # [\'1\', \'2\', \'\', \'3\']', learn: {
+      summary: "break text into a list of pieces",
+      what: "split is a method: you call it on a string with a dot, like line.split(). It chops the string into pieces and returns them in a list. With no argument it splits wherever there is whitespace (spaces, tabs, newlines) and ignores extra spaces, which is ideal for reading several values from one line. With an argument, it splits exactly at that separator text.",
+      params: {
+        sep: "optional separator. Leave it out to split on any whitespace; split(\",\") splits \"a,b,c\" at the commas",
+        maxsplit: "optional limit on how many splits to make; -1 (the default) means no limit. \"a b c\".split(maxsplit=1) gives [\"a\", \"b c\"]"
+      },
+      returns: "A list of strings. You usually index it (parts[0]) or unpack it: first, last = line.split().",
+      example: "words = \"red  green blue\".split()   # ['red', 'green', 'blue']\nprint(len(words))                   # 3\ny, m, d = \"2024-11-10\".split(\"-\")   # y='2024', m='11', d='10'",
+      watch: [
+        "The pieces are still strings: \"3 4\".split() gives [\"3\", \"4\"], not numbers. Convert each with int().",
+        "Unpacking a, b = s.split() raises ValueError unless there are exactly two pieces.",
+        "split(\" \") (with a space) keeps empty strings where there are double spaces; plain split() does not."
+      ]
+    }  }),
   M('str', 'join', 'str.join(iterable) -> str', 'Concatenate strings with this string as separator: `" ".join(map(str, nums))`. **O(total length)**; items must be strings.', {
     params: 'iterable: strings to join', insert: 'join(${1:iterable})', returns: 'str — the items joined by this string; TypeError if any item is not a str', example: '" ".join(["a", "b"])  # \'a b\'\nprint("\\n".join(map(str, nums)))' }),
   M('str', 'strip', 'str.strip(chars=None) -> str', 'Remove leading and trailing whitespace (or *chars*).', { params: 'chars: set of characters to remove', returns: 'str — a stripped copy', example: '"  hi\\n".strip()  # \'hi\'\n"xxhixx".strip("x")  # \'hi\'' }),
@@ -395,3 +450,29 @@ export default [
     example: 'from dataclasses import dataclass\n@dataclass\nclass Point:\n    x: int' }),
   e('module', null, 'typing','from typing import List, Optional', 'Type-hint helpers.', { example: 'from typing import List, Optional\ndef first(a: List[int]) -> Optional[int]:\n    return a[0] if a else None' }),
 ];
+
+// Beginner explanations for entries introduced by problems ("New in this problem" cards).
+const LEARN = [
+  ["sys", "stdin", {
+  "summary": "the program's input, as a file-like object",
+  "what": "`sys.stdin` is **standard input**: the text fed into your program. When you type in a terminal it is the keyboard; on Crucible it is the test case's input. Python treats it like an open text file, so you can read all of it at once with `sys.stdin.read()`, or go line by line with `for line in sys.stdin:`. You must `import sys` first.",
+  "example": "import sys                 # gives access to sys.stdin\nfor line in sys.stdin:     # loop over every input line\n    print(len(line))       # each line still ends with \"\\n\"",
+  "watch": [
+    "Forgetting `import sys` gives `NameError: name 'sys' is not defined`.",
+    "Lines read this way keep their trailing `\"\\n\"`; use `.strip()` to remove it."
+  ]
+}],
+  ["sys.stdin", "read", {
+  "summary": "read all remaining input as one string",
+  "what": "Reads **everything** left on standard input, all lines at once, and gives it back as a single string (newlines included). It is handy when the input has several values spread over one or more lines: read it all, then cut it into pieces with `.split()`.",
+  "returns": "A `str` holding all the input text, e.g. `\"3 4\\n\"`. At the end of input it returns an empty string `\"\"`.",
+  "example": "import sys\ntext = sys.stdin.read()    # e.g. \"red green\\nblue\\n\"\nwords = text.split()       # [\"red\", \"green\", \"blue\"]\nprint(len(words))          # 3",
+  "watch": [
+    "It waits until the input ends; in a terminal you finish typing with Ctrl-D.",
+    "The string includes newlines; `.split()` with no argument removes all whitespace for you."
+  ]
+}],
+];
+for (const [owner, name, learn] of LEARN) { const e = entries.find((x) => x.owner === owner && x.name === name); if (e && !e.learn) e.learn = learn; }
+
+export default entries;

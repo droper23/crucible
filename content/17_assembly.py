@@ -321,9 +321,10 @@ missing pair of parentheses; a crash inside a `call` usually means `rsp` was not
 
 
 def _starter(sol, todos, comment="//"):
-    """Replace each instruction line starting with `needle` by a `// TODO(n): text` line."""
+    """Replace each instruction line starting with `needle` by a `// TODO(n): text` line.
+    A todo is (needle, text) or (needle, text, detail); details go in the notes."""
     lines = sol.split("\n")
-    for n, (needle, text) in enumerate(todos, 1):
+    for n, (needle, text, *_) in enumerate(todos, 1):
         hits = [i for i, l in enumerate(lines) if l.strip().startswith(needle)]
         assert len(hits) == 1, (needle, hits)
         i = hits[0]
@@ -337,9 +338,20 @@ _R = random.Random(1717)
 PROBLEMS = []
 
 
+def _todo_notes(notes, todos):
+    """Append a "Your TODOs" list with the fuller explanation of each detailed TODO."""
+    items = [f"* **TODO({n}):** {t[2]}" for n, t in enumerate(todos, 1) if len(t) > 2]
+    if not items:
+        return notes
+    return (notes.rstrip() + "\n\n" if notes else "") + "**Your TODOs**\n\n" + "\n".join(items)
+
+
 def _add(p, todos):
     p["kind"] = "asm"
     p["asm_starter"] = _starter(p["asm_solution"], todos)
+    asm_notes = _todo_notes((p.get("lang_notes") or {}).get("asm", ""), todos)
+    if asm_notes:
+        p.setdefault("lang_notes", {})["asm"] = asm_notes
     x = p.pop("x86", None)
     if x:
         # x86-64 (AT&T syntax) version of the same problem: x86=dict(solution, todos,
@@ -348,7 +360,7 @@ def _add(p, todos):
         p["x86_starter"] = _starter(x["solution"], x["todos"], "#")
         p["x86_hints"] = x["hints"]
         p["x86_explanation"] = x["explanation"]
-        p.setdefault("lang_notes", {})["x86"] = x["notes"]
+        p.setdefault("lang_notes", {})["x86"] = _todo_notes(x["notes"], x["todos"])
     PROBLEMS.append(p)
 
 
@@ -749,7 +761,8 @@ O(1).
 * **One-operand `mulq %rsi`**: it overwrites `%rdx` (holding `c`) with the high half.
 * **Clobbering an argument you still need** before you have used it.""",
     ),
-), [("mul x8, x0, x1", "multiply a (x0) by b (x1) and store the product in the scratch register x8")])
+), [("mul x8, x0, x1", "multiply a by b into the scratch register x8",
+         "Multiply `a` (in `x0`) by `b` (in `x1`) and store the product in the scratch register `x8`, so the arguments stay intact.")])
 
 # ---------------------------------------------------------------- 4. abs
 _add(dict(
@@ -846,7 +859,8 @@ _abs_value:                    # function entry
     cmovlq %rcx, %rax          # if signed-less-than: rax = -x, otherwise keep x
     ret                        # return |x|
 """,
-        todos=[("cmovlq %rcx, %rax", "if the comparison said x < 0 (signed), replace rax with the negated copy in rcx")],
+        todos=[("cmovlq %rcx, %rax", "if x < 0, replace rax with the negated copy",
+         "Use the flags from the comparison: if it said `x < 0` (signed), replace `%rax` with the negated copy in `%rcx`; otherwise leave `%rax` alone.")],
         notes="""**On entry:** `%rdi = x`. **On exit:** `%rax = |x|`.
 
 x86 has no conditional negate, but it has **conditional move**: `cmovCCq src, dst`
@@ -888,7 +902,8 @@ O(1).
 * **`cmov` with an immediate**: `cmovlq $0, %rax` is not encodable; the source must be
   a register or memory.""",
     ),
-), [("cneg x0, x0, lt", "if the comparison said x0 < 0 (signed), replace x0 with -x0; otherwise keep it")])
+), [("cneg x0, x0, lt", "if x0 is negative, replace it with -x0",
+         "Use the flags from the comparison: if it said `x0 < 0` (signed), replace `x0` with `-x0`; otherwise keep it. One conditional instruction does both.")])
 
 # ---------------------------------------------------------------- 5. max
 _add(dict(
@@ -973,7 +988,8 @@ _max_of_two:                   # function entry
     cmovleq %rsi, %rax         # if a <= b (signed): rax = b
     ret                        # return the larger value
 """,
-        todos=[("cmovleq %rsi, %rax", "if a is not greater than b (signed), replace rax with b")],
+        todos=[("cmovleq %rsi, %rax", "if a <= b, replace rax with b",
+         "Using the flags from the comparison: if `a` is not greater than `b` (signed condition), replace `%rax` (a copy of `a`) with `b` from `%rsi`.")],
         notes="""**On entry:** `%rdi = a`, `%rsi = b`. **On exit:** `%rax = max(a, b)`.
 
 AT&T `cmpq src, dst` sets the flags from **`dst - src`**, so the condition reads
@@ -1008,7 +1024,8 @@ O(1).
 * **Reading `cmp` in Intel order.** `cmpq %rsi, %rdi` compares `a` to `b` (a − b), not b to a.
 * **Unsigned conditions** (`cmovbeq`): −1 then looks larger than everything.""",
     ),
-), [("csel x0, x0, x1, gt", "select a if it is greater (signed) than b, otherwise b, into x0")])
+), [("csel x0, x0, x1, gt", "put the larger of a and b in x0",
+         "Using the flags from the comparison, select `a` (`x0`) if it is greater than `b` (signed), otherwise `b` (`x1`), into `x0`, in one conditional instruction.")])
 
 # ---------------------------------------------------------------- 6. is_even
 _add(dict(
@@ -1096,7 +1113,8 @@ _is_even:                      # function entry
     movzbq %al, %rax           # zero-extend the byte to all 64 bits of rax
     ret                        # return the boolean
 """,
-        todos=[("sete %al", "set the low byte of rax to 1 if the tested bit was zero (ZF set), otherwise 0")],
+        todos=[("sete %al", "al = 1 if the tested bit was zero, else 0",
+         "Set the low byte of `%rax` (`%al`) to 1 if the tested bit was zero (ZF set), otherwise 0. The next line widens it to the full register.")],
         notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = 1` if `n` is even, else `0`.
 
 `setCC` writes **one byte**: 1 if the condition holds, else 0. Its operand must be an
@@ -1134,7 +1152,8 @@ O(1).
 * **Clearing `%rax` with `xor` *between* `test` and `sete`**: `xor` rewrites the flags.
   (Clearing it *before* the `test` is the classic idiom.)""",
     ),
-), [("cset x0, eq", "set x0 to 1 if the tested bit was zero (Z flag set), otherwise 0")])
+), [("cset x0, eq", "x0 = 1 if the tested bit was zero, else 0",
+         "Set `x0` to 1 if the tested bit was zero (the Z flag is set), otherwise to 0, with one conditional instruction.")])
 
 # ---------------------------------------------------------------- 7. sum 1..n
 _add(dict(
@@ -1388,7 +1407,8 @@ Lloop:                         # loop test
 Ldone:                         # loop exit
     ret                        # return result (already in rax)
 """,
-        todos=[("movq $1, %rax", "initialise the accumulator rax to the multiplicative identity"),
+        todos=[("movq $1, %rax", "initialise the accumulator rax",
+         "Initialise the accumulator `%rax` to the multiplicative identity: the value that leaves any number unchanged when you multiply by it."),
                ("imulq %rdi, %rax", "multiply the accumulator rax by the current n")],
         notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = n!`.
 
@@ -1425,7 +1445,8 @@ O(n) time, O(1) space.
 * **`jbe` instead of `jle`**: fine for these tests, but the signed condition matches the C type.
 * **One-operand `mulq %rdi`**: multiplies `%rax` but also clobbers `%rdx`.""",
     ),
-), [("mov x1, #1", "initialise the accumulator x1 to the multiplicative identity"),
+), [("mov x1, #1", "initialise the accumulator x1",
+         "Initialise the accumulator `x1` to the multiplicative identity: the value that leaves any number unchanged when you multiply by it."),
     ("mul x1, x1, x0", "multiply the accumulator x1 by the current n (x0)")])
 
 # ---------------------------------------------------------------- 9. sum array
@@ -1539,7 +1560,8 @@ Lloop:                         # loop test
 Ldone:                         # loop exit
     ret                        # return the total
 """,
-        todos=[("addq (%rdi), %rax", "add the 8-byte element the pointer points at into the total"),
+        todos=[("addq (%rdi), %rax", "add the element at the pointer into the total",
+         "Add the 8-byte element that `%rdi` points at straight into the total in `%rax`: x86 arithmetic can read one operand directly from memory."),
                ("addq $8, %rdi", "advance the pointer to the next 8-byte element")],
         notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`. **On exit:** `%rax = sum`.
 
@@ -1580,7 +1602,8 @@ O(n) time, O(1) space.
 * **Memory-to-memory**: `addq (%rdi), (%rax)` is not encodable; at most one operand
   may be in memory.""",
     ),
-), [("ldr x3, [x0], #8", "load the current element into x3 and advance the pointer x0 to the next 8-byte element"),
+), [("ldr x3, [x0], #8", "load the element into x3, advance x0",
+         "Load the current element into `x3` and advance the pointer `x0` to the next 8-byte element, in one instruction (a post-indexed load)."),
     ("add x2, x2, x3", "add the loaded element into the running total x2")])
 
 # ---------------------------------------------------------------- 10. strlen
@@ -1690,7 +1713,8 @@ Lloop:                         # loop test
 Ldone:                         # loop exit
     ret                        # return the length
 """,
-        todos=[("movzbq (%rdi,%rax), %rcx", "load the single byte at address s + length into rcx, zero-extended"),
+        todos=[("movzbq (%rdi,%rax), %rcx", "load the byte at s + length into rcx",
+         "Load the single byte at address `s + length` (`%rdi + %rax`) into `%rcx`, zero-extended to 64 bits so the high bytes are 0."),
                ("incq %rax", "increment the length counter")],
         notes="""**On entry:** `%rdi = s`. **On exit:** `%rax = length`.
 
@@ -1841,7 +1865,8 @@ Ldone:                         # loop exit
     ret                        # return the count
 """,
         todos=[("cmpq %rdx, %rcx", "compare the loaded element (rcx) with target (rdx)"),
-               ("sete %cl", "set the low byte of rcx to 1 if they were equal, otherwise 0")],
+               ("sete %cl", "cl = 1 if they were equal, else 0",
+         "Set the low byte of `%rcx` (`%cl`) to 1 if the comparison found them equal, otherwise 0. The following lines widen it and add it to the count.")],
         notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`, `%rdx = target`.
 **On exit:** `%rax = occurrences`.
 
@@ -1876,7 +1901,8 @@ O(n) time, O(1) space.
 * **Putting `addq $8, %rdi` between `cmpq` and `sete`**: `add` overwrites the flags.""",
     ),
 ), [("cmp x4, x2", "compare the loaded element (x4) with target (x2)"),
-    ("cinc x3, x3, eq", "increment the counter x3 only if the comparison found them equal")])
+    ("cinc x3, x3, eq", "count it in x3 if they were equal",
+         "Increment the counter `x3` only if the comparison found the two values equal, with one conditional instruction (no branch).")])
 
 # ---------------------------------------------------------------- 12. max array
 _add(dict(
@@ -1990,7 +2016,8 @@ Ldone:                         # loop exit
 """,
         todos=[("movq (%rdi), %rax", "seed the best value rax with nums[0]"),
                ("cmpq %rax, %rcx", "compare the new element rcx with the current best rax"),
-               ("cmovgq %rcx, %rax", "keep the new element if it is greater (signed), otherwise keep the best")],
+               ("cmovgq %rcx, %rax", "keep the larger of the new element and best",
+         "Using the flags from the comparison, replace the best `%rax` with the new element `%rcx` if it is greater (signed); otherwise keep the best.")],
         notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count` (≥ 1). **On exit:** `%rax = max`.
 
 Remember the AT&T compare order: `cmpq %r8, %r9` sets flags from `r9 - r8`, so a
@@ -2023,9 +2050,11 @@ O(n) time, O(1) space.
 * **`cmpq %rcx, %rax`** reverses the meaning of `g`: you would compute the minimum.
 * **`cmovaq`** (unsigned "above"): negative numbers look huge.""",
     ),
-), [("ldr x2, [x0], #8", "seed the best value x2 with nums[0] and advance x0 to the next element"),
+), [("ldr x2, [x0], #8", "seed the best x2 with nums[0], advance x0",
+         "Seed the best value `x2` with `nums[0]` and advance `x0` to the next element, in one post-indexed load."),
     ("cmp x3, x2", "compare the new element x3 with the current best x2"),
-    ("csel x2, x3, x2, gt", "keep the new element if it is greater (signed), otherwise keep the best")])
+    ("csel x2, x3, x2, gt", "keep the larger of the new element and best",
+         "Using the flags from the comparison, keep the new element `x3` if it is greater (signed), otherwise keep the best `x2`; the result goes in `x2`.")])
 
 # ---------------------------------------------------------------- 13. popcount
 _add(dict(
@@ -2293,7 +2322,8 @@ Ldone:                         # loop exit
     ret                        # return a
 """,
         todos=[("xorl %edx, %edx", "clear the high half of the 128-bit dividend"),
-               ("divq %rsi", "divide a by b (unsigned): quotient into rax, remainder into rdx")],
+               ("divq %rsi", "divide a by b (unsigned)",
+         "Divide `a` by `b` (unsigned). The 128-bit dividend is `rdx:rax`; the quotient lands in `%rax` and the remainder in `%rdx`.")],
         notes="""**On entry:** `%rdi = a`, `%rsi = b`. **On exit:** `%rax = gcd(a, b)`.
 
 x86 division is unusual: `divq src` divides the **128-bit** value `%rdx:%rax` by `src`,
@@ -2332,7 +2362,8 @@ O(log min(a, b)) iterations.
 * **`cqto` + `idivq`** works too for non-negative inputs, but `div` matches the unsigned spec.""",
     ),
 ), [("udiv x2, x0, x1", "compute the quotient a / b (unsigned) into x2"),
-    ("msub x2, x2, x1, x0", "turn the quotient into the remainder: x2 = a - q * b")])
+    ("msub x2, x2, x1, x0", "turn the quotient into the remainder",
+         "Turn the quotient into the remainder: `x2 = a - q * b`, in a single instruction.")])
 
 # ---------------------------------------------------------------- 15. fibonacci
 _add(dict(
@@ -2447,7 +2478,8 @@ Lloop:                         # loop test
 Ldone:                         # loop exit
     ret                        # return a = F(n)
 """,
-        todos=[("leaq (%rax,%rcx), %rdx", "compute the next Fibonacci number a + b into the temporary rdx in one instruction"),
+        todos=[("leaq (%rax,%rcx), %rdx", "next value a + b into rdx, in one instruction",
+         "Compute the next Fibonacci number `a + b` (`%rax + %rcx`) into the temporary `%rdx` in one instruction, using an address computation that never touches memory."),
                ("movq %rcx, %rax", "slide the window: a becomes b"),
                ("movq %rdx, %rcx", "slide the window: b becomes the new value")],
         notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = F(n)`.
@@ -2485,7 +2517,8 @@ O(n) time, O(1) space.
 * **`movq (%rax,%rcx), %rdx`** *reads memory* at that address: a segfault. Only `lea`
   computes the address without loading.""",
     ),
-), [("add x3, x1, x2", "compute the next Fibonacci number a + b into the temporary x3"),
+), [("add x3, x1, x2", "next value a + b into the temporary x3",
+         "Compute the next Fibonacci number `a + b` (`x1 + x2`) into the temporary `x3`, so neither old value is lost yet."),
     ("mov x1, x2", "slide the window: a becomes b"),
     ("mov x2, x3", "slide the window: b becomes the new value")])
 
@@ -2634,7 +2667,8 @@ Lvowel:                        # the byte was a vowel
 Ldone:                         # end of string
     ret                        # return the count
 """,
-        todos=[("movzbq (%rdi), %rcx", "load the current byte of the string into rcx, zero-extended"),
+        todos=[("movzbq (%rdi), %rcx", "load the current byte into rcx",
+         "Load the current byte of the string into `%rcx`, zero-extended to 64 bits."),
                ("orq $0x20, %rcx", "lowercase the character by setting bit 5 (0x20)")],
         notes="""**On entry:** `%rdi = s`. **On exit:** `%rax` = number of vowels.
 
@@ -2672,7 +2706,8 @@ O(n) time, O(1) space.
 * **`andq $0x20`** clears everything *except* bit 5.
 * **Comparing before folding case** misses uppercase vowels.""",
     ),
-), [("ldrb w2, [x0], #1", "load the next byte of the string into w2 and advance x0 by one byte"),
+), [("ldrb w2, [x0], #1", "load the next byte into w2, advance x0",
+         "Load the next byte of the string into `w2` and advance `x0` by one byte, in one post-indexed load."),
     ("orr w2, w2, #0x20", "lowercase the character by setting bit 5 (0x20)")])
 
 # ---------------------------------------------------------------- 17. reverse
@@ -2794,7 +2829,8 @@ Lloop:                         # loop test
 Ldone:                         # done
     ret                        # void function: nothing to return
 """,
-        todos=[("leaq -8(%rdi,%rsi,8), %rdx", "compute the address of the last element, nums + count*8 - 8, into rdx with one instruction"),
+        todos=[("leaq -8(%rdi,%rsi,8), %rdx", "rdx = address of the last element",
+         "Compute the address of the last element, `nums + count*8 - 8`, into `%rdx` with one instruction: an address computation with base, index, scale 8 and displacement -8."),
                ("movq %r8, (%rdi)", "store the old right value (r8) at the left pointer"),
                ("movq %rcx, (%rdx)", "store the old left value (rcx) at the right pointer")],
         notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`. **On exit:** the array is reversed in place.
@@ -2834,9 +2870,12 @@ O(n) time, O(1) space.
 * **Storing a register back where it came from**: the array is unchanged.
 * **Scale 1 instead of 8**: `(%rdi,%rsi)` points into the middle of the array.""",
     ),
-), [("add x2, x0, x1, lsl #3", "compute nums + count*8 (one past the last element) into x2 using a shifted register operand"),
-    ("str x4, [x0], #8", "store the old right value (x4) at the left pointer, then advance the left pointer by 8"),
-    ("str x3, [x2], #-8", "store the old left value (x3) at the right pointer, then move the right pointer back by 8")])
+), [("add x2, x0, x1, lsl #3", "x2 = nums + count*8 (one past the end)",
+         "Compute `nums + count*8`, the address one past the last element, into `x2`, using a shifted register operand (shifting left by 3 multiplies by 8)."),
+    ("str x4, [x0], #8", "store the right value at left, advance left",
+         "Store the old right value (`x4`) at the left pointer, then advance the left pointer by 8, in one post-indexed store."),
+    ("str x3, [x2], #-8", "store the left value at right, move right back",
+         "Store the old left value (`x3`) at the right pointer, then move the right pointer back by 8, in one post-indexed store.")])
 
 # ---------------------------------------------------------------- 18. dot product
 _add(dict(
@@ -2955,7 +2994,8 @@ Lloop:                         # loop test
 Ldone:                         # loop exit
     ret                        # return the total
 """,
-        todos=[("imulq (%rdx), %r8", "multiply a[i] (r8) by b[i], read directly from b's pointer"),
+        todos=[("imulq (%rdx), %r8", "multiply r8 (a[i]) by b[i]",
+         "Multiply `a[i]` (in `%r8`) by `b[i]`, reading `b[i]` directly from memory through b's pointer `%rdx`."),
                ("addq %r8, %rax", "add the product to the running total"),
                ("addq $8, %rdx", "advance b's pointer to its next element")],
         notes="""**On entry:** `%rdi = &a[0]`, `%rsi = len(a)`, `%rdx = &b[0]`, `%rcx = len(b)`
@@ -2991,8 +3031,10 @@ O(n) time, O(1) space.
   and b's pointer are both destroyed.
 * **Advancing only one pointer**: every `a[i]` gets multiplied by `b[0]`.""",
     ),
-), [("ldr x6, [x2], #8", "load b[i] from b's pointer (x2) into x6 and advance that pointer"),
-    ("madd x4, x5, x6, x4", "multiply a[i] (x5) by b[i] (x6) and add the product to the total x4")])
+), [("ldr x6, [x2], #8", "load b[i] into x6, advance b's pointer",
+         "Load `b[i]` from b's pointer (`x2`) into `x6` and advance that pointer, in one post-indexed load."),
+    ("madd x4, x5, x6, x4", "add a[i] * b[i] to the total x4",
+         "Multiply `a[i]` (`x5`) by `b[i]` (`x6`) and add the product to the total `x4`, in a single instruction.")])
 
 # ---------------------------------------------------------------- 19. binary search
 _bs_big = sorted(_R.sample(range(-10**6, 10**6), 500))
@@ -3138,7 +3180,8 @@ Lnot_found:                    # range became empty
     movq $-1, %rax             # return -1
     ret                        # back to the caller
 """,
-        todos=[("jg Lnot_found", "leave the loop when lo > hi, using a SIGNED condition (hi can be -1)"),
+        todos=[("jg Lnot_found", "leave the loop when lo > hi",
+         "Leave the loop (jump to `Lnot_found`) when `lo > hi`. Use a **signed** condition: `hi` can become -1."),
                ("movq (%rdi,%rax,8), %rcx", "load nums[mid] into rcx (address = nums + mid * 8)"),
                ("jl Lgo_right", "if nums[mid] < target (signed), branch to Lgo_right")],
         notes="""**On entry:** `%rdi = &nums[0]`, `%rsi = count`, `%rdx = target`.
@@ -3180,7 +3223,8 @@ O(log n) time, O(1) space.
 * **Scale 1** in the load reads misaligned bytes.
 * **`jb` instead of `jl`** for the value comparison breaks on negative numbers.""",
     ),
-), [("b.gt Lnot_found", "leave the loop when lo > hi, using a SIGNED condition (hi can be -1)"),
+), [("b.gt Lnot_found", "leave the loop when lo > hi",
+         "Leave the loop (branch to `Lnot_found`) when `lo > hi`. Use a **signed** condition: `hi` can become -1."),
     ("ldr x6, [x0, x5, lsl #3]", "load nums[mid] into x6 (address = nums + mid * 8)"),
     ("b.lt Lgo_right", "if nums[mid] < target (signed), branch to Lgo_right")])
 
@@ -3328,8 +3372,10 @@ Lno:                           # mismatch found
     movq $0, %rax              # return false
     ret                        # back to the caller
 """,
-        todos=[("jae Lyes", "if the left pointer is at or past the right pointer (unsigned), every pair matched: branch to Lyes"),
-               ("movzbq (%rsi), %rcx", "load the byte at the right pointer into rcx, zero-extended"),
+        todos=[("jae Lyes", "if left >= right, jump to Lyes",
+         "If the left pointer is at or past the right pointer, every pair matched: jump to `Lyes`. Pointers are addresses, so use an **unsigned** condition."),
+               ("movzbq (%rsi), %rcx", "load the right byte into rcx",
+         "Load the byte at the right pointer (`%rsi`) into `%rcx`, zero-extended to 64 bits."),
                ("cmpq %rcx, %rax", "compare the left byte with the right byte"),
                ("jne Lno", "if they differ, branch to Lno")],
         notes="""**On entry:** `%rdi = s`. **On exit:** `%rax = 1` if `s` is a palindrome, else `0`.
@@ -3369,8 +3415,10 @@ O(n) time, O(1) space.
 * **`cmpb $0, %rsi`** (no parentheses) compares the pointer itself, and the size does
   not match: `invalid operand for instruction`.""",
     ),
-), [("b.hs Lyes", "if the left pointer is at or past the right pointer (unsigned), every pair matched: branch to Lyes"),
-    ("ldrb w3, [x1], #-1", "load the byte at the right pointer into w3 and move the right pointer back one byte"),
+), [("b.hs Lyes", "if left >= right, branch to Lyes",
+         "If the left pointer is at or past the right pointer, every pair matched: branch to `Lyes`. Pointers are addresses, so use an **unsigned** condition."),
+    ("ldrb w3, [x1], #-1", "load the right byte into w3, step right back",
+         "Load the byte at the right pointer into `w3` and move the right pointer back one byte, in one post-indexed load."),
     ("cmp w2, w3", "compare the left byte with the right byte"),
     ("b.ne Lno", "if they differ, branch to Lno")])
 
@@ -3533,7 +3581,8 @@ Lnoswap:                       # move to the next pair
 Ldone:                         # finished
     ret                        # void function
 """,
-        todos=[("movq 8(%rcx), %r10", "load the neighbour cursor[1] (8 bytes past the cursor) into r10"),
+        todos=[("movq 8(%rcx), %r10", "load cursor[1] into r10",
+         "Load the neighbour `cursor[1]`, 8 bytes past the cursor `%rcx`, into `%r10`."),
                ("jle Lnoswap", "skip the swap if cursor[0] <= cursor[1] (signed)"),
                ("movq %r10, (%rcx)", "write the old cursor[1] into cursor[0]"),
                ("movq %rax, 8(%rcx)", "write the old cursor[0] into cursor[1]")],
@@ -3572,9 +3621,11 @@ O(n²) time worst case, O(n) when already sorted; O(1) space.
 * **Unsigned `jbe`**: negative numbers sort after positive ones.
 * **`cmpq %rax, %r10`** reverses the test: the array ends up sorted descending.""",
     ),
-), [("ldp x5, x6, [x3]", "load the adjacent pair cursor[0] and cursor[1] into x5 and x6 with one pair load"),
+), [("ldp x5, x6, [x3]", "load cursor[0] and cursor[1] into x5, x6",
+         "Load the adjacent pair `cursor[0]` and `cursor[1]` into `x5` and `x6` with one pair load."),
     ("b.le Lnoswap", "skip the swap if x5 <= x6 (signed)"),
-    ("stp x6, x5, [x3]", "store the pair back in swapped order with one pair store")])
+    ("stp x6, x5, [x3]", "store the pair back swapped",
+         "Store the pair back in swapped order (`x6` first, then `x5`) with one pair store.")])
 
 # ---------------------------------------------------------------- 22. recursive fib
 _add(dict(
@@ -3737,9 +3788,12 @@ Lbase:                         # n < 2
     ret                        # return
 """,
         todos=[("pushq %rbp", "save the caller's frame pointer on the stack"),
-               ("pushq %rbx", "save the caller's callee-saved rbx before you use it"),
-               ("movq %rax, %r12", "keep F(n-1) (currently in rax) safe in the callee-saved register r12"),
-               ("popq %rbx", "restore the caller's rbx (restores come in reverse order of the saves)")],
+               ("pushq %rbx", "save the caller's rbx",
+         "Save the caller's callee-saved `%rbx` on the stack before you use it."),
+               ("movq %rax, %r12", "keep F(n-1) safe in r12",
+         "Keep `F(n-1)` (currently in `%rax`) safe in the callee-saved register `%r12`, because the next call will overwrite `%rax`."),
+               ("popq %rbx", "restore the caller's rbx",
+         "Restore the caller's `%rbx`. Restores come in the reverse order of the saves.")],
         notes="""**On entry:** `%rdi = n`. **On exit:** `%rax = F(n)`.
 
 `call` pushes the return address and `ret` pops it, so there is no link register to
@@ -3788,7 +3842,11 @@ O(φⁿ) time (exponential), O(n) stack depth.
 * **Unbalanced paths**: the base case must not run the epilogue, because it never ran
   the prologue.""",
     ),
-), [("stp x29, x30, [sp, #-32]!", "allocate a 32-byte frame and save x29 and x30 at its bottom with one pre-indexed pair store"),
-    ("stp x19, x20, [sp, #16]", "save the caller's callee-saved registers x19 and x20 in the upper half of the frame"),
-    ("mov x20, x0", "keep F(n-1) (currently in x0) safe in the callee-saved register x20"),
-    ("ldp x29, x30, [sp], #32", "restore x29 and x30 and release the 32-byte frame with one post-indexed pair load")])
+), [("stp x29, x30, [sp, #-32]!", "make a 32-byte frame, save x29 and x30",
+         "Allocate a 32-byte stack frame and save `x29` and `x30` at its bottom, with one pre-indexed pair store (it moves `sp` down first)."),
+    ("stp x19, x20, [sp, #16]", "save x19 and x20 in the frame's upper half",
+         "Save the caller's callee-saved registers `x19` and `x20` in the upper half of the frame (offset 16), with one pair store."),
+    ("mov x20, x0", "keep F(n-1) safe in x20",
+         "Keep `F(n-1)` (currently in `x0`) safe in the callee-saved register `x20`, because the next call will overwrite `x0`."),
+    ("ldp x29, x30, [sp], #32", "restore x29, x30 and free the frame",
+         "Restore `x29` and `x30` and release the 32-byte frame, with one post-indexed pair load (it moves `sp` back up afterwards).")])

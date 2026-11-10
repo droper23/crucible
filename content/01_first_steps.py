@@ -71,7 +71,7 @@ Notice that C, C++ and Rust spell out the **type** of every value: `long long` a
 
 ## How Crucible works
 
-Each problem page has the **statement** (what to compute), a few **examples**, the **constraints** (how big the inputs can be), and an editor with **starter code**. In this track the starter code contains `TODO` comments that tell you exactly what to type for the first several problems. Read them; they explain what every line of the skeleton is for.
+Each problem page has the **statement** (what to compute), a few **examples**, the **constraints** (how big the inputs can be), and an editor with **starter code**. In this track the starter code contains short `TODO` comments marking what you need to write, and for the first several problems the **language notes** under the statement explain every function and piece of syntax you will need. Read them before you start typing.
 
 * **Run** executes your code against the example tests only. Use it often: it is fast and shows you what your code produced next to what was expected.
 * **Submit** runs every test, including hidden edge cases such as zero, negative numbers, empty arrays and very large values. A problem counts as solved when all of them pass.
@@ -120,82 +120,71 @@ There is no input. Capital `H`, capital `W`, a comma after `Hello`, one space, a
     examples=1,
     constraints=["No input is given."],
     hints=[
-        "Every language has one built-in way to print a line of text. Find it in the starter code's TODO comment.",
+        "Every language has one built-in way to print a line of text. The language notes under the statement name it.",
         "Text in code goes inside double quotes: `\"Hello, World!\"`. The quotes are not printed; they just mark where the text starts and ends.",
         "Python: `print(\"Hello, World!\")`. C: `printf(\"Hello, World!\\n\");`. C++: `cout << \"Hello, World!\" << endl;`. Rust: `println!(\"Hello, World!\");`.",
     ],
     starters={
-        "python": r'''# Welcome to your very first program!
-# Python runs this file from the top line to the bottom line.
-#
-# print(...) is a built-in function that writes text to the screen.
-# For example, this line would show the word  Hi :
-#     print("Hi")
-#
-# - The double quotes make the text a *string* (a piece of text).
-#   The quotes mark where the text starts and ends; they are not printed.
-# - print automatically adds a newline after the text.
-#
-# TODO: on the empty line below, write ONE print call that shows the exact
-# text from the problem statement. Copy it character for character:
-# capital letters, the comma, the space and the exclamation mark all count.
+        "python": r'''# TODO: print the exact line from the statement
 
 ''',
-        "c": r'''#include <stdio.h>   // brings in printf, the "standard input/output" library
+        "c": r'''#include <stdio.h>
 
-// Every C program starts running at the first line inside main().
-// `int` means main gives back a whole number to the operating system.
 int main(void) {
-    // printf prints text exactly as written. For example, this would show  Hi :
-    //     printf("Hi\n");
-    //
-    // - The text goes inside double quotes (the quotes are not printed).
-    // - printf does NOT add a newline by itself; "\n" inside the quotes
-    //   is the newline character, so we add it ourselves.
-    // - Every statement in C ends with a semicolon ;
-    //
-    // TODO: write one printf line that prints the exact text from the
-    // problem statement, followed by a newline.
+    // TODO: print the exact line from the statement, then a newline
 
-    return 0;   // 0 means "the program finished successfully"
+    return 0;
 }
 ''',
-        "cpp": r'''#include <bits/stdc++.h>   // brings in the whole standard library, including cout
-using namespace std;       // lets us write cout instead of std::cout
+        "cpp": r'''#include <bits/stdc++.h>
+using namespace std;
 
-// Every C++ program starts running inside main().
 int main() {
-    // cout is the "character output" stream: the screen.
-    // << pushes the value on its right into the stream, left to right,
-    // and endl writes a newline. For example, this would show  Hi :
-    //     cout << "Hi" << endl;
-    //
-    // TODO: write one cout line that prints the exact text from the problem
-    // statement, followed by a newline. Don't forget the semicolon ;
+    // TODO: print the exact line from the statement, then a newline
 
-    return 0;   // 0 means "the program finished successfully"
+    return 0;
 }
 ''',
-        "rust": r'''// Every Rust program starts running inside fn main().
-fn main() {
-    // println! is a *macro* (the ! marks it): it prints text plus a newline.
-    // The text goes inside double quotes. For example, this would show  Hi :
-    //     println!("Hi");
-    //
-    // TODO: write one println! line that prints the exact text from the
-    // problem statement. End the line with a semicolon ;
+        "rust": r'''fn main() {
+    // TODO: print the exact line from the statement
 }
 ''',
-        "espresso": r'''// ESPresso runs this file from top to bottom.
-//
-// print writes its argument followed by a newline. No semicolon needed.
-// For example, this would show  Hi :
-//     print("Hi")
-//
-// TODO: below, write one print line that shows the exact text from the
-// problem statement (capitals, comma, space and exclamation mark included).
+        "espresso": r'''// TODO: print the exact line from the statement
 
 ''',
+    },
+    lang_notes={
+        "python": r"""
+Python runs your file from the top line to the bottom line, so a file with one line in it is a complete program.
+
+* `print(...)` is a built-in **function** that writes text to the screen. For example, `print("Hi")` shows `Hi`.
+* The double quotes make the text a **string** (a piece of text). They mark where the text starts and ends; they are not printed.
+* `print` adds a newline after the text automatically.
+
+Copy the text from the statement character for character: capital letters, the comma, the space and the exclamation mark all count.
+""",
+        "c": r"""
+* `#include <stdio.h>` brings in the *standard input/output* library, which provides `printf`.
+* Every C program starts running at the first line inside `main()`. The `int` in `int main` means main gives a whole number back to the operating system; `return 0;` means "finished successfully".
+* `printf("Hi\n");` prints text exactly as written, so it shows `Hi`. The text goes inside double quotes (the quotes are not printed).
+* `printf` does **not** add a newline by itself. `\n` inside the quotes is the newline character, so you add it yourself.
+* Every statement in C ends with a semicolon `;`.
+""",
+        "cpp": r"""
+* `#include <bits/stdc++.h>` brings in the whole standard library, including `cout`. `using namespace std;` lets you write `cout` instead of `std::cout`.
+* Every C++ program starts running inside `main()`. `return 0;` means "finished successfully".
+* `cout` is the *character output* stream: the screen. `<<` pushes the value on its right into the stream, left to right, and `endl` writes a newline. For example, `cout << "Hi" << endl;` shows `Hi`.
+* Every statement ends with a semicolon `;`.
+""",
+        "rust": r"""
+* Every Rust program starts running inside `fn main()`.
+* `println!(...)` prints text followed by a newline. The `!` marks it as a **macro** rather than a plain function, and it is part of the name.
+* The text goes inside double quotes. For example, `println!("Hi");` shows `Hi`.
+* End the line with a semicolon `;`.
+""",
+        "espresso": r"""
+ESPresso runs the file from top to bottom. `print(...)` writes its argument followed by a newline; no semicolon is needed. For example, `print("Hi")` shows `Hi`.
+""",
     },
     explanation=r"""
 ## Intuition
@@ -321,72 +310,78 @@ It takes no parameters. Do **not** print anything: Crucible calls your function 
         "Python: `return 42`. C / C++: `return 42;`. Rust: the last line of the body is just `42` (no semicolon), or `return 42;`.",
     ],
     starters={
-        "python": r'''# `def` starts a function definition.
-#   the_answer   -> the function's name
-#   ()           -> its parameter list (empty: it needs no input)
-#   -> int       -> a note saying it gives back an integer
-#   :            -> the indented lines below are the function's body
-def the_answer() -> int:
-    # `return` ends the function and hands a value back to the caller.
-    # For example, a function whose body is   return 7   gives back 7.
-    #
-    # TODO: replace `pass` with a return statement that hands back the
-    # number the problem statement asks for.
+        "python": r'''def the_answer() -> int:
+    # TODO: return the number the statement asks for
     pass
 ''',
         "c": r'''#include <stdio.h>
 #include <stdbool.h>
 
-// long long     -> the type of value this function gives back (a 64-bit integer)
-// the_answer    -> the function's name
-// ()            -> no parameters
-// { ... }       -> the body: the statements that run when it is called
 long long the_answer() {
-    // `return` stops the function and hands the value after it to the caller.
-    // Right now it hands back 0. (`return 7;` would hand back 7.)
-    //
-    // TODO: change the returned value to the number the problem asks for.
+    // TODO: return the number the statement asks for
     return 0;
 }
 ''',
         "cpp": r'''#include <bits/stdc++.h>
 using namespace std;
 
-// long long     -> the type of value this function gives back (a 64-bit integer)
-// theAnswer     -> the function's name (C++ problems here use camelCase names)
-// ()            -> no parameters
 long long theAnswer() {
-    // `return` stops the function and hands the value after it to the caller.
-    // Right now it hands back 0. (`return 7;` would hand back 7.)
-    //
-    // TODO: change the returned value to the number the problem asks for.
+    // TODO: return the number the statement asks for
     return 0;
 }
 ''',
-        "rust": r'''// pub fn       -> a public function definition
-// the_answer   -> its name
-// ()           -> no parameters
-// -> i64       -> it returns an i64 (a 64-bit signed integer)
-pub fn the_answer() -> i64 {
-    // In Rust, the last expression in a body, written WITHOUT a semicolon,
-    // is the value the function returns. So the line `0` below *is* the
-    // return: it hands back 0. (A body ending in `7` would hand back 7.)
-    //
-    // TODO: change it so the function returns the number the problem asks for.
+        "rust": r'''pub fn the_answer() -> i64 {
+    // TODO: return the number the statement asks for
     0
 }
 ''',
-        "espresso": r'''// fn          -> starts a function definition
-// theAnswer   -> its name
-// ()          -> no parameters
-fn theAnswer() {
-    // `return` hands the value after it back to the caller.
-    // Right now it hands back 0. (`return 7` would hand back 7.)
-    //
-    // TODO: change the returned value to the number the problem asks for.
+        "espresso": r'''fn theAnswer() {
+    // TODO: return the number the statement asks for
     return 0
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+Reading the first line of the starter, piece by piece:
+
+* `def` starts a function definition.
+* `the_answer` is the function's name.
+* `()` is its parameter list; it is empty because the function needs no input.
+* `-> int` is a note saying it gives back an integer.
+* `:` means the indented lines below are the function's **body**.
+
+`return` ends the function and hands a value back to the caller: a body of `return 7` gives back 7. `pass` is a placeholder that does nothing; replace it.
+""",
+        "c": r"""
+Reading `long long the_answer() { ... }` piece by piece:
+
+* `long long` is the type of value the function gives back (a 64-bit whole number). In C it comes **before** the name.
+* `the_answer` is the name, and `()` means it takes no parameters.
+* `{ ... }` is the body: the statements that run when it is called.
+
+`return` stops the function and hands the value after it to the caller. The starter's `return 0;` hands back 0; `return 7;` would hand back 7.
+""",
+        "cpp": r"""
+Reading `long long theAnswer() { ... }` piece by piece:
+
+* `long long` is the type of value the function gives back (a 64-bit whole number).
+* `theAnswer` is the name (C++ problems on this site use camelCase names), and `()` means no parameters.
+* `{ ... }` is the body.
+
+`return` stops the function and hands the value after it to the caller. The starter's `return 0;` hands back 0; `return 7;` would hand back 7.
+""",
+        "rust": r"""
+Reading `pub fn the_answer() -> i64 { ... }` piece by piece:
+
+* `pub fn` starts a public function definition, `the_answer` is its name and `()` means no parameters.
+* `-> i64` says it returns an `i64`, a 64-bit signed integer.
+
+In Rust, the **last expression in a body, written without a semicolon, is the returned value**. So the starter's final line `0` *is* the return: it hands back 0, and a body ending in `7` would hand back 7. Adding a semicolon after it turns it into a statement that returns nothing, and the compiler reports *mismatched types*.
+""",
+        "espresso": r"""
+`fn` starts a function definition, `theAnswer` is its name and `()` means no parameters. `return` hands the value after it back to the caller: the starter's `return 0` hands back 0, and `return 7` would hand back 7.
+""",
     },
     explanation=r"""
 ## Intuition
@@ -512,66 +507,64 @@ Complete `add(a, b)` so that it returns the sum `a + b`.
         "One line: `return a + b` (with a `;` in C/C++, or just `a + b` as the last line in Rust).",
     ],
     starters={
-        "python": r'''# a and b are *parameters*: when the tests call add(2, 3),
-# a becomes 2 and b becomes 3 for the duration of this call.
-def add(a: int, b: int) -> int:
-    # You can do arithmetic on parameters and return the result.
-    # For example, a function that triples its parameter x would say:
-    #     return x * 3
-    #
-    # TODO: replace `pass` with a return statement that hands back the
-    # sum of the two parameters.
+        "python": r'''def add(a: int, b: int) -> int:
+    # TODO: return the sum of the two parameters
     pass
 ''',
         "c": r'''#include <stdio.h>
 #include <stdbool.h>
 
-// Each parameter is written as  <type> <name>.
-// long long is a 64-bit whole number (it can hold values up to about 9.2e18).
 long long add(long long a, long long b) {
-    // You can do arithmetic on parameters and return the result.
-    // For example, a function that triples its parameter x would say:
-    //     return x * 3;
-    //
-    // TODO: replace 0 with an expression that adds the two parameters.
+    // TODO: return the sum of the two parameters
     return 0;
 }
 ''',
         "cpp": r'''#include <bits/stdc++.h>
 using namespace std;
 
-// Each parameter is written as  <type> <name>.
 long long add(long long a, long long b) {
-    // You can do arithmetic on parameters and return the result.
-    // For example, a function that triples its parameter x would say:
-    //     return x * 3;
-    //
-    // TODO: replace 0 with an expression that adds the two parameters.
+    // TODO: return the sum of the two parameters
     return 0;
 }
 ''',
-        "rust": r'''// Each parameter is written as  <name>: <type>.
-// i64 is a 64-bit signed integer.
-pub fn add(a: i64, b: i64) -> i64 {
-    // The last expression (no semicolon) is the returned value. For example,
-    // a function that triples its parameter x would end with the line:  x * 3
-    //
-    // TODO: replace 0 with an expression that adds the two parameters
-    // (keep it without a semicolon).
-    let _ = (a, b); // (this line only silences "unused variable" warnings; delete it)
+        "rust": r'''pub fn add(a: i64, b: i64) -> i64 {
+    // TODO: return the sum of the two parameters (no semicolon)
+    let _ = (a, b); // silences "unused variable" warnings; delete it
     0
 }
 ''',
-        "espresso": r'''// ESPresso parameters have no written types.
-fn add(a, b) {
-    // You can do arithmetic on parameters and return the result.
-    // For example, a function that triples its parameter x would say:
-    //     return x * 3
-    //
-    // TODO: replace 0 with an expression that adds the two parameters.
+        "espresso": r'''fn add(a, b) {
+    // TODO: return the sum of the two parameters
     return 0
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+`a` and `b` are **parameters**: when the tests call `add(2, 3)`, `a` becomes 2 and `b` becomes 3 for the duration of that call.
+
+You can do arithmetic on parameters and return the result. For example, a function that triples its parameter `x` would say `return x * 3`.
+""",
+        "c": r"""
+Each parameter is written as `<type> <name>`. `long long` is a 64-bit whole number; it can hold values up to about 9.2 × 10¹⁸.
+
+You can do arithmetic on parameters and return the result. For example, a function that triples its parameter `x` would say `return x * 3;`.
+""",
+        "cpp": r"""
+Each parameter is written as `<type> <name>`. `long long` is a 64-bit whole number.
+
+You can do arithmetic on parameters and return the result. For example, a function that triples its parameter `x` would say `return x * 3;`.
+""",
+        "rust": r"""
+Each parameter is written as `<name>: <type>`; `i64` is a 64-bit signed integer.
+
+The last expression, without a semicolon, is the returned value. For example, a function that triples its parameter `x` would end with the line `x * 3`.
+
+The starter's `let _ = (a, b);` line only stops the compiler warning that `a` and `b` are unused. Delete it once your code uses them.
+""",
+        "espresso": r"""
+ESPresso parameters have no written types. You can do arithmetic on them and return the result: a function that triples its parameter `x` would say `return x * 3`.
+""",
     },
     explanation=r"""
 ## Intuition
@@ -688,22 +681,14 @@ Remember: return the value, do not print it.
     ],
     starters={
         "python": r'''def square(n: int) -> int:
-    # Multiplication is written with *. For example, `x * 3` is three times x.
-    #
-    # TODO: replace `pass` with a return statement that hands back n
-    # multiplied by itself.
-    # Note: `n ^ 2` does NOT square in Python (^ is bitwise XOR).
-    #       Python does have a power operator, **, so 2 ** 3 is 8.
+    # TODO: return n multiplied by itself
     pass
 ''',
         "c": r'''#include <stdio.h>
 #include <stdbool.h>
 
 long long square(long long n) {
-    // Multiplication is written with *. For example, `x * 3` is three times x.
-    //
-    // TODO: replace 0 with n multiplied by itself.
-    // Note: C has no power operator; `n ^ 2` is bitwise XOR, not a square.
+    // TODO: return n multiplied by itself
     return 0;
 }
 ''',
@@ -711,29 +696,48 @@ long long square(long long n) {
 using namespace std;
 
 long long square(long long n) {
-    // Multiplication is written with *. For example, `x * 3` is three times x.
-    //
-    // TODO: replace 0 with n multiplied by itself.
-    // Note: `n ^ 2` is bitwise XOR in C++, not a square.
+    // TODO: return n multiplied by itself
     return 0;
 }
 ''',
         "rust": r'''pub fn square(n: i64) -> i64 {
-    // Multiplication is written with *. For example, `x * 3` is three times x.
-    //
-    // TODO: replace 0 with n multiplied by itself (no semicolon).
-    // Note: `n ^ 2` is bitwise XOR in Rust, not a square.
-    let _ = n; // (only silences an "unused" warning; delete this line)
+    // TODO: return n multiplied by itself (no semicolon)
+    let _ = n; // silences an "unused" warning; delete it
     0
 }
 ''',
         "espresso": r'''fn square(n) {
-    // Multiplication is written with *. For example, `x * 3` is three times x.
-    //
-    // TODO: replace 0 with n multiplied by itself.
+    // TODO: return n multiplied by itself
     return 0
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+Multiplication is written with `*`: `x * 3` is three times `x`.
+
+Careful: `n ^ 2` does **not** square in Python; `^` is bitwise XOR. Python does have a power operator, `**`, so `2 ** 3` is 8.
+""",
+        "c": r"""
+Multiplication is written with `*`: `x * 3` is three times `x`.
+
+Careful: C has no power operator. `n ^ 2` is bitwise XOR, not a square.
+""",
+        "cpp": r"""
+Multiplication is written with `*`: `x * 3` is three times `x`.
+
+Careful: `n ^ 2` is bitwise XOR in C++, not a square.
+""",
+        "rust": r"""
+Multiplication is written with `*`: `x * 3` is three times `x`. Remember that the returned expression has no semicolon.
+
+Careful: `n ^ 2` is bitwise XOR in Rust, not a square.
+
+The starter's `let _ = n;` line only silences an "unused" warning; delete it.
+""",
+        "espresso": r"""
+Multiplication is written with `*`: `x * 3` is three times `x`.
+""",
     },
     explanation=r"""
 ## Intuition
@@ -853,42 +857,24 @@ The line may contain spaces, punctuation and digits. It may also be empty, in wh
 """,
     constraints=["The line has at most 1000 characters.", "The input contains only printable ASCII characters and ends with a newline."],
     hints=[
-        "Each language has a function that reads one whole line of text from standard input. The starter's TODO names it.",
+        "Each language has a function that reads one whole line of text from standard input. The language notes under the statement name it.",
         "Read the line into a variable, then print that variable.",
         "Watch out for the newline at the end of the line. Python's `input()` removes it; C's `fgets` and Rust's `read_line` keep it, so either print without adding another, or strip it first.",
     ],
     starters={
-        "python": r'''# input() waits for one line of text from standard input and returns it
-# as a string, WITHOUT the newline at the end. You can store what it
-# returns in a variable, and print(...) a variable to show its value:
-#     city = input()             # reads e.g.  Paris
-#     print("You typed:", city)  # shows:      You typed: Paris
-#
-# TODO 1: read the input line into a variable.
-# TODO 2: print that variable, and nothing else, so the line comes out
-#         exactly as it went in.
+        "python": r'''# TODO 1: read the input line into a variable
+# TODO 2: print that variable, unchanged
 
 ''',
         "c": r'''#include <stdio.h>
 #include <string.h>
 
 int main(void) {
-    // A C string is an array of characters. We reserve room for 1000
-    // characters, plus the newline, plus the '\0' that marks the end.
-    char line[1100];
+    char line[1100]; // room for 1000 chars, the '\n' and the '\0'
 
-    // TODO 1: read one line from standard input (stdin) into `line`.
-    // fgets(destination, size, stdin) reads up to size - 1 characters into
-    // the array `destination`, stopping after a '\n'. `sizeof line` is the
-    // array's size in bytes. fgets KEEPS the '\n' at the end of the line,
-    // and returns NULL when there was nothing at all to read; in that case
-    // set line[0] = '\0' so `line` holds an empty string instead of garbage.
+    // TODO 1: read one line from stdin into line
 
-    // TODO 2: print the line back. %s in printf means "insert a string here",
-    // e.g.  printf("Name: %s\n", word);  prints  Name:  then the text in `word`.
-    // The line you read already ends with '\n', so don't add another one.
-    // Never pass the text itself as the format (printf(text)): a % inside it
-    // would be misread as a format specifier.
+    // TODO 2: print line back exactly (it already ends in '\n')
 
     return 0;
 }
@@ -897,15 +883,11 @@ int main(void) {
 using namespace std;
 
 int main() {
-    // string is C++'s growable text type.
     string line;
 
-    // TODO 1: read one whole line (spaces included) into `line`.
-    // getline(cin, s) reads everything up to the newline into the string s
-    // and throws the newline away. (cin >> s would stop at the first space!)
+    // TODO 1: read one whole line (spaces included) into line
 
-    // TODO 2: print it followed by a newline. With cout, << sends each value
-    // in turn, e.g.  cout << "Name: " << word << "\n";
+    // TODO 2: print line followed by a newline
 
     return 0;
 }
@@ -913,24 +895,52 @@ int main() {
         "rust": r'''use std::io;
 
 fn main() {
-    // `let mut` creates a variable that we are allowed to change (mutable).
-    // String::new() is an empty, growable string.
     let mut line = String::new();
 
-    // TODO 1: read one line from standard input into `line`.
-    // io::stdin().read_line(&mut s) appends the next input line to the String s.
-    // &mut lends the string to read_line so it can change it. It returns a
-    // Result, so add .unwrap() ("if reading failed, stop with an error").
-    // read_line KEEPS the '\n' at the end.
+    // TODO 1: read one line from stdin into line
 
-    // TODO 2: remove the trailing newline, then print.
-    // s.trim_end_matches(&['\n', '\r'][..]) gives s without any '\n' / '\r'
-    // at its end (trim_end() would also remove trailing spaces, which this
-    // problem must keep). You can shadow the variable with a new `let`.
-    // In println!, each {} is replaced by the next argument, e.g.
-    //     println!("Name: {}", word);
+    // TODO 2: remove the trailing newline, then print the line
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+* `input()` waits for one line of text from standard input and returns it as a string, **without** the newline at the end.
+* You can store what it returns in a variable, and `print(...)` a variable to show its value:
+
+```python
+city = input()             # reads e.g.  Paris
+print("You typed:", city)  # shows:      You typed: Paris
+```
+
+Print only the line itself, so it comes out exactly as it went in.
+""",
+        "c": r"""
+**Strings in C.** A C string is an array of characters that ends with the special character `'\0'`. The starter's `line` array reserves room for up to 1000 characters, plus the newline, plus that `'\0'`.
+
+**Reading a line.** `fgets(buf, sizeof buf, stdin)` reads up to `sizeof buf - 1` characters from standard input (`stdin`) into the array `buf`, stopping after a `'\n'`. `sizeof buf` is the array's size in bytes.
+
+* `fgets` **keeps** the `'\n'` at the end of the line.
+* It returns `NULL` when there was nothing at all to read. In that case set `buf[0] = '\0'` so the array holds an empty string instead of garbage.
+
+**Printing a string.** In `printf(...)`, `%s` means "insert a string here": `printf("Name: %s\n", word);` prints `Name: ` followed by the text in `word`. The line you read already ends with `'\n'`, so don't add another one.
+
+Never pass the text itself as the format (`printf(text)`): a `%` inside it would be misread as a format specifier.
+""",
+        "cpp": r"""
+* `string` is C++'s growable text type.
+* `getline(cin, s)` reads everything up to the newline into the string `s` and throws the newline away. (`cin >> s` would stop at the first space!)
+* With `cout`, `<<` sends each value in turn: `cout << "Name: " << word << "\n";`
+""",
+        "rust": r"""
+* `let mut` creates a variable you are allowed to change (*mutable*). `String::new()` makes an empty, growable string.
+* `io::stdin().read_line(&mut s)` appends the next input line to the String `s`. `&mut` lends the string to `read_line` so it can change it. It returns a `Result`, so add `.unwrap()` ("if reading failed, stop with an error").
+* `read_line` **keeps** the `'\n'` at the end.
+
+To remove it, `s.trim_end_matches(&['\n', '\r'][..])` gives `s` without any `'\n'` or `'\r'` at its end. (`s.trim_end()` would also remove trailing spaces, which this problem must keep.) You can **shadow** the variable by writing a new `let` with the same name.
+
+In `println!(...)`, each `{}` is replaced by the next argument: `println!("Name: {}", word);`
+""",
     },
     explanation=r"""
 ## Intuition
@@ -1085,15 +1095,8 @@ where `<name>` is the line you read (without its newline). Names may contain spa
         "Python: `print(f\"Hello, {name}!\")`. C: strip the `\\n` from `fgets`, then `printf(\"Hello, %s!\\n\", name);`. Rust: `println!(\"Hello, {}!\", name);`.",
     ],
     starters={
-        "python": r'''# An f-string (an f before the opening quote) fills each {variable}
-# with that variable's value:
-#     city = "Paris"
-#     print(f"Welcome to {city}.")    # shows:  Welcome to Paris.
-# Joining strings with + works too:  "Welcome to " + city + "."
-#
-# TODO 1: read the name with input() (it removes the newline for you).
-# TODO 2: print the greeting in exactly the format the statement shows,
-#         with the name in the middle. Mind the comma, space and "!".
+        "python": r'''# TODO 1: read the name
+# TODO 2: print the greeting in the statement's exact format
 
 ''',
         "c": r'''#include <stdio.h>
@@ -1102,16 +1105,11 @@ where `<name>` is the line you read (without its newline). Names may contain spa
 int main(void) {
     char name[200];
 
-    // TODO 1: read the line into `name` with fgets(destination, size, stdin).
-    // It returns NULL if there was nothing to read (you can just return 0 then).
+    // TODO 1: read the line into name (return 0 if there is none)
 
-    // TODO 2: fgets keeps the '\n'. Cut the string just before it by writing
-    // the end-of-string marker '\0' there. strcspn(s, "\r\n") returns the index
-    // of the first '\r' or '\n' in s (or its length if there is none), e.g.
-    //     word[strcspn(word, "\r\n")] = '\0';
+    // TODO 2: cut off the trailing newline
 
-    // TODO 3: print the greeting. In printf, %s is replaced by a string
-    // argument, e.g.  printf("Welcome to %s.\n", city);
+    // TODO 3: print the greeting
 
     return 0;
 }
@@ -1122,11 +1120,9 @@ using namespace std;
 int main() {
     string name;
 
-    // TODO 1: read the whole line into `name` (names can contain spaces).
-    // getline(cin, s) reads up to the newline and drops the newline.
+    // TODO 1: read the whole line into name
 
-    // TODO 2: print the greeting. With cout, << sends pieces one after another:
-    //     cout << "Welcome to " << city << "." << "\n";
+    // TODO 2: print the greeting
 
     return 0;
 }
@@ -1136,17 +1132,46 @@ int main() {
 fn main() {
     let mut name = String::new();
 
-    // TODO 1: read the line into `name`:
-    // io::stdin().read_line(&mut s).unwrap() appends one input line to s.
+    // TODO 1: read the line into name
 
-    // TODO 2: remove the trailing newline. s.trim_end() gives s without its
-    // trailing whitespace, which is fine because names do not end with a
-    // space. Shadow the variable with a new `let` to keep the trimmed version.
+    // TODO 2: remove the trailing newline
 
-    // TODO 3: print the greeting. Each {} in println! is filled by the next
-    // argument, e.g.  println!("Welcome to {}.", city);
+    // TODO 3: print the greeting
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+`input()` reads the line and removes the newline for you.
+
+An **f-string** (an `f` before the opening quote) fills each `{variable}` with that variable's value:
+
+```python
+city = "Paris"
+print(f"Welcome to {city}.")    # shows:  Welcome to Paris.
+```
+
+Joining strings with `+` works too: `"Welcome to " + city + "."`. Mind the comma, space and `!` in the greeting.
+""",
+        "c": r"""
+* `fgets(buf, sizeof buf, stdin)` reads one line into `buf`. It returns `NULL` if there was nothing to read (you can just `return 0;` then).
+* `fgets` keeps the `'\n'`. Cut the string just before it by writing the end-of-string marker `'\0'` there. `strcspn(s, "\r\n")` (from `<string.h>`) returns the index of the first `'\r'` or `'\n'` in `s`, or its length if there is none:
+
+```c
+word[strcspn(word, "\r\n")] = '\0';
+```
+
+* In `printf(...)`, `%s` is replaced by a string argument: `printf("Welcome to %s.\n", city);`
+""",
+        "cpp": r"""
+* Names can contain spaces, so read the whole line: `getline(cin, s)` reads up to the newline and drops the newline.
+* With `cout`, `<<` sends pieces one after another: `cout << "Welcome to " << city << "." << "\n";`
+""",
+        "rust": r"""
+* `io::stdin().read_line(&mut s).unwrap()` appends one input line, including its `'\n'`, to `s`.
+* `s.trim_end()` gives `s` without its trailing whitespace, which is fine here because names do not end with a space. Shadow the variable with a new `let` to keep the trimmed version.
+* Each `{}` in `println!(...)` is filled by the next argument: `println!("Welcome to {}.", city);`
+""",
     },
     explanation=r"""
 ## Intuition
@@ -1291,32 +1316,20 @@ The input contains two integers `a` and `b` separated by whitespace (a space or 
     starters={
         "python": r'''import sys
 
-# sys.stdin.read() returns ALL of the input as one string, e.g. "3 4\n".
-data = sys.stdin.read()
+data = sys.stdin.read()  # all of the input, as one string
 
-# Useful tools:
-#   "red  green\nblue".split()  -> ["red", "green", "blue"]  (splits on any whitespace)
-#   int("15")                   -> 15   (text to a whole number)
-#   int("15") + int("1")        -> 16, but "15" + "1" -> "151" (text is glued!)
-#
-# TODO 1: split `data` into its two pieces.
-# TODO 2: convert each piece to an integer.
-# TODO 3: print their sum.
+# TODO 1: split data into its two pieces
+# TODO 2: convert each piece to an integer
+# TODO 3: print their sum
 ''',
         "c": r'''#include <stdio.h>
 
 int main(void) {
-    // long long holds 64-bit integers; values up to 10^12 do NOT fit in int.
-    long long a, b;
+    long long a, b; // 64-bit: values up to 10^12 do not fit in int
 
-    // TODO 1: read the two integers into a and b with scanf.
-    // %lld in the format means "a long long in decimal", and & passes the
-    // ADDRESS of a variable so scanf can store into it. Reading one number:
-    //     scanf("%lld", &count);
-    // A format can contain several %lld, with one &variable for each.
+    // TODO 1: read the two integers into a and b
 
-    // TODO 2: print the sum followed by a newline. printf uses the same
-    // %lld to print a long long:  printf("%lld\n", total);
+    // TODO 2: print their sum, then a newline
 
     return 0;
 }
@@ -1325,16 +1338,11 @@ int main(void) {
 using namespace std;
 
 int main() {
-    // long long holds 64-bit integers; values up to 10^12 do NOT fit in int.
-    long long a, b;
+    long long a, b; // 64-bit: values up to 10^12 do not fit in int
 
-    // TODO 1: read the two integers into a and b.
-    // cin >> x skips whitespace and converts the next number into x;
-    // you can chain reads:  cin >> x >> y;
+    // TODO 1: read the two integers into a and b
 
-    // TODO 2: print the sum followed by "\n".
-    // cout << prints any value, including the result of arithmetic:
-    //     cout << x * 2 << "\n";
+    // TODO 2: print their sum, then "\n"
 
     return 0;
 }
@@ -1342,22 +1350,49 @@ int main() {
         "rust": r'''use std::io::{self, Read};
 
 fn main() {
-    // Read all of standard input into one String.
     let mut input = String::new();
-    io::stdin().read_to_string(&mut input).unwrap();
+    io::stdin().read_to_string(&mut input).unwrap(); // all of stdin
 
-    // Useful tools:
-    //   let mut it = s.split_whitespace();  // iterator over the &str pieces
-    //   it.next()                           // the next piece, as an Option
-    //   let n: i64 = "15".parse().unwrap(); // text -> i64
-    // next() returns an Option (there may be no piece left) and parse()
-    // returns a Result (the text may not be a number), so both need .unwrap().
-    //
-    // TODO 1: split `input` on whitespace.
-    // TODO 2: take the two pieces and parse each into an i64.
-    // TODO 3: print their sum with println!("{}", ...).
+    // TODO 1: split input on whitespace
+    // TODO 2: parse the two pieces into i64 values
+    // TODO 3: print their sum
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+`sys.stdin.read()` returns **all** of the input as one string, for example `"3 4\n"`. Useful tools:
+
+* `"red  green\nblue".split()` gives `["red", "green", "blue"]`: it splits on any whitespace.
+* `int("15")` turns text into the whole number 15.
+* `int("15") + int("1")` is 16, but `"15" + "1"` is `"151"`: text is glued, not added!
+""",
+        "c": r"""
+`scanf(...)` reads formatted input. In its format, `%lld` means "a `long long` in decimal", and `&` passes the **address** of a variable so `scanf` can store into it. Reading one number:
+
+```c
+scanf("%lld", &count);
+```
+
+A format can contain several `%lld`, with one `&variable` for each.
+
+`printf(...)` uses the same `%lld` to print a `long long`: `printf("%lld\n", total);`
+""",
+        "cpp": r"""
+* `cin >> x` skips whitespace and converts the next number into `x`. You can chain reads: `cin >> x >> y;`
+* `cout <<` prints any value, including the result of arithmetic: `cout << x * 2 << "\n";`
+""",
+        "rust": r"""
+The starter already reads all of standard input into one String with `io::stdin().read_to_string(&mut s)`. Useful tools:
+
+```rust
+let mut it = s.split_whitespace();  // iterator over the &str pieces
+it.next()                           // the next piece, as an Option
+let n: i64 = "15".parse().unwrap(); // text -> i64
+```
+
+`next()` returns an `Option` (there may be no piece left) and `parse()` returns a `Result` (the text may not be a number), so both need `.unwrap()`. Print with `println!("{}", ...)`.
+""",
     },
     explanation=r"""
 ## Intuition
@@ -1517,22 +1552,14 @@ Zero is **not** positive.
     ],
     starters={
         "python": r'''def is_positive(n: int) -> bool:
-    # A comparison such as  x < 10  produces a bool: True or False.
-    # You can return a comparison directly; no `if` is needed.
-    #
-    # TODO: replace `pass` with a return statement whose comparison is True
-    # exactly when n is strictly greater than zero.
+    # TODO: return whether n is strictly greater than zero
     pass
 ''',
         "c": r'''#include <stdio.h>
-#include <stdbool.h>   // defines the bool type and the words true / false
+#include <stdbool.h>
 
 bool is_positive(long long n) {
-    // A comparison such as  x < 10  produces true or false, and can be
-    // returned directly; no `if` is needed.
-    //
-    // TODO: replace `false` with a comparison that is true exactly when
-    // n is strictly greater than zero.
+    // TODO: return whether n is strictly greater than zero
     return false;
 }
 ''',
@@ -1540,33 +1567,38 @@ bool is_positive(long long n) {
 using namespace std;
 
 bool isPositive(long long n) {
-    // A comparison such as  x < 10  produces true or false, and can be
-    // returned directly; no `if` is needed.
-    //
-    // TODO: replace `false` with a comparison that is true exactly when
-    // n is strictly greater than zero.
+    // TODO: return whether n is strictly greater than zero
     return false;
 }
 ''',
         "rust": r'''pub fn is_positive(n: i64) -> bool {
-    // A comparison such as  x < 10  produces true or false, and can be the
-    // returned expression directly; no `if` is needed.
-    //
-    // TODO: replace `false` with a comparison that is true exactly when
-    // n is strictly greater than zero (no semicolon).
-    let _ = n; // (only silences an "unused" warning; delete this line)
+    // TODO: return whether n is strictly greater than zero
+    let _ = n; // silences an "unused" warning; delete it
     false
 }
 ''',
         "espresso": r'''fn isPositive(n) {
-    // A comparison such as  x < 10  produces true or false, and can be
-    // returned directly; no `if` is needed.
-    //
-    // TODO: replace false with a comparison that is true exactly when
-    // n is strictly greater than zero.
+    // TODO: return whether n is strictly greater than zero
     return false
 }
 ''',
+    },
+    lang_notes={
+        "python": r"""
+A comparison such as `x < 10` produces a `bool`: `True` or `False`. You can return a comparison directly; no `if` is needed.
+""",
+        "c": r"""
+`#include <stdbool.h>` defines the `bool` type and the words `true` and `false`. A comparison such as `x < 10` produces true or false, and can be returned directly; no `if` is needed.
+""",
+        "cpp": r"""
+A comparison such as `x < 10` produces `true` or `false`, and can be returned directly; no `if` is needed.
+""",
+        "rust": r"""
+A comparison such as `x < 10` produces `true` or `false`, and can be the returned expression directly (no `if`, no semicolon). Delete the starter's `let _ = n;` line once you use `n`.
+""",
+        "espresso": r"""
+A comparison such as `x < 10` produces `true` or `false`, and can be returned directly; no `if` is needed.
+""",
     },
     explanation=r"""
 ## Intuition

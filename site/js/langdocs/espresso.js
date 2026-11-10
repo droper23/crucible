@@ -159,6 +159,19 @@ export default [
     example: 'print("n =", n, [1, 2])\nprint("n = {n}, next = {n + 1}")',
     returns: 'null',
     insert: 'print(${1})',
+    learn: {
+      summary: "show values on the output",
+      what: "print writes its arguments to the output on one line, separated by spaces, and then ends the line. You can pass text in double quotes, numbers, arrays: anything. Inside a string, {expression} is replaced by its value, so \"n = {n}\" shows the current value of n. Each call to print produces one line of output.",
+      params: {
+        "values...": "any number of values separated by commas, e.g. print(\"count\", 3)"
+      },
+      returns: "null (nothing useful). print is used for its output.",
+      example: "var count = 3                // a value to show\nprint(\"count\", count)        // count 3\nprint(\"next: {count + 1}\")   // next: 4\nprint([1, 2, 3])             // [1, 2, 3]",
+      watch: [
+        "print always adds spaces between values: print(\"a\", \"b\") shows a b. For exact formatting use one string with {...} inside.",
+        "Floats are shown with 6 significant digits."
+      ]
+    },
   },
   {
     name: 'log',

@@ -23,6 +23,15 @@ export default [
     example: 'h = []\nheapq.heappush(h, 5)',  // REQUIRED: realistic usage, 1–4 lines, valid code
     insert: 'heappush(${1:heap}, ${2:item})', // optional Monaco snippet inserted on completion (default: name)
     header: 'import heapq',      // optional: required import/#include/use line (shown in hover)
+    learn: {                     // optional, for entries a problem introduces ("New in this problem" card).
+      summary: 'add an item to a heap',   // ≤ 8 words, lower-case tagline
+      what: 'Plain-English explanation for a beginner (2–4 sentences): what it does, when to use it.',
+      params: { heap: 'the list you keep as a heap; start with []', item: 'the value to add' },
+                                 // every part of the call (or asm operand) → plain English, with example values
+      returns: 'Nothing (None). The heap list itself changes.',
+      example: 'h = []\nheapq.heappush(h, 5)   # h is now [5]',  // every line commented
+      watch: ['Pushing onto a plain unsorted list does not heapify it first.'],  // 1–3 pitfalls
+    },
   },
 ]
 ```
